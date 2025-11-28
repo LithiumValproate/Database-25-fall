@@ -66,4 +66,4 @@ No:
 ___
 
 > *附件：*
-> ***[评分细则](Grading_Rubric.md)***
+> ***[评分细则](../output/Grading_Rubric.md)***
