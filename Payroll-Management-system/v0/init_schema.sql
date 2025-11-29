@@ -1,10 +1,9 @@
-create schema payroll_management;
-
+create schema if not exists payroll_management;
 use payroll_management;
 
-create table Employee
+create table if not exists Employee
 (
-    EmployeeId     char(8)        not null auto_increment comment '员工编号',
+    EmployeeId     char(8)        not null comment '员工编号',
     EmployeeName   varchar(20)    not null comment '姓名',
     Department     varchar(30)    not null comment '部门',
     Position       varchar(30)    not null comment '职位',
@@ -15,7 +14,7 @@ create table Employee
     primary key (EmployeeId)
 ) comment '员工';
 
-create table Payroll_Items
+create table if not exists Payroll_Items
 (
     ItemId   char(4)     not null comment '项目编号',
     ItemName varchar(20) not null unique comment '项目名称',
@@ -24,9 +23,9 @@ create table Payroll_Items
     primary key (ItemId)
 ) comment '工资奖励/扣除项目';
 
-create table Bonus_Record
+create table if not exists Bonus_Record
 (
-    BonusId     char(14)      not null auto_increment comment '记录编号',
+    BonusId     char(14)      not null comment '记录编号',
     EmployeeId  char(8)       not null comment '员工编号',
     BonusType   char(4)       not null comment '奖金类型',
     BonusAmount decimal(8, 2) not null comment '金额',
@@ -36,19 +35,7 @@ create table Bonus_Record
     foreign key (BonusType) references Payroll_Items (ItemId)
 ) comment '奖金记录';
 
-create trigger trg_Bonus_type
-    before insert
-    on Bonus_Record
-    for each row
-begin
-    declare v_type bool;
-    select ItemType into v_type from Payroll_Items where ItemId = new.BonusType;
-    if v_type = 0 then
-        signal sqlstate '45000' set message_text = 'BonusType must refer to a reward item';
-    end if;
-end;
-
-create table Deduction_Record
+create table if not exists Deduction_Record
 (
     DeductionId     char(14)      not null comment '扣款记录编号',
     EmployeeId      char(8)       not null comment '员工编号',
@@ -60,71 +47,156 @@ create table Deduction_Record
     foreign key (DeductionType) references Payroll_Items (ItemId)
 ) comment '扣款记录';
 
-create trigger trg_Deduction_type
-    before insert
-    on Deduction_Record
-    for each row
-begin
-    declare v_type bool;
-    select ItemType into v_type from Payroll_Items where ItemId = new.DeductionType;
-    if v_type = 1 then
-        signal sqlstate '45000' set message_text = 'DeductionType must refer to a deduction item';
-    end if;
-end;
-
-create procedure checkDateRange(in s date, in e date)
-begin
-    if e < s then
-        signal sqlstate '45000'
-            set message_text = 'EndDate must be >= StartDate';
-    end if;
-end;
-
-create table Absence_Type
+create table if not exists Absence_Type
 (
     AbsenceType varchar(20) not null comment '缺勤类型',
     Description varchar(200) comment '描述',
     primary key (AbsenceType)
 ) comment '缺勤类型';
 
-create table Absence_Record
+create table if not exists Absence_Record
 (
-    AbsenceId   char(10)     not null auto_increment comment '记录编号',
-    EmployeeId  char(8)      not null comment '员工编号',
-    AbsenceType varchar(20)  not null comment '缺勤类型',
-    StartDate   date         not null comment '开始日期',
-    EndDate     date         not null comment '结束日期',
-    Duration    int unsigned not null comment '缺勤天数',
-    Attachment  text comment '证明材料',
+    AbsenceId     char(10)     not null comment '记录编号',
+    EmployeeId    char(8)      not null comment '员工编号',
+    AbsenceType   varchar(20)  not null comment '缺勤类型',
+    StartDateTime datetime     not null comment '开始时间',
+    EndDateTime   datetime     not null comment '结束时间',
+    Duration      int unsigned not null comment '缺勤时长（分钟）',
+    Attachment    mediumtext comment '证明材料',
     primary key (AbsenceId),
     foreign key (EmployeeId) references Employee (EmployeeId),
     foreign key (AbsenceType) references Absence_Type (AbsenceType)
 ) comment '缺勤记录';
 
-create trigger trg_Absence_date
+create table if not exists Overtime_Type
+(
+    OvertimeType varchar(20) not null comment '加班类型',
+    Description  varchar(200) comment '描述',
+    primary key (OvertimeType)
+) comment '加班类型';
+
+create table if not exists Overtime_Record
+(
+    OvertimeId    char(10)     not null comment '记录编号',
+    EmployeeId    char(8)      not null comment '员工编号',
+    OvertimeType  varchar(20)  not null comment '加班类型',
+    StartDateTime datetime     not null comment '加班开始时间',
+    EndDateTime   datetime     not null comment '加班结束时间',
+    Duration      int unsigned not null comment '加班时长（分钟）',
+    Attachment    mediumtext comment '证明材料',
+    primary key (OvertimeId),
+    foreign key (EmployeeId) references Employee (EmployeeId),
+    foreign key (OvertimeType) references Overtime_Type (OvertimeType)
+) comment '加班记录';
+
+create table if not exists Payment_Method
+(
+    PaymentMethodId   char(4)     not null comment '支付方式编号',
+    PaymentMethodName varchar(20) not null unique comment '支付方式名称',
+    Description       varchar(200) comment '描述',
+    BankAccount       varchar(50) comment '银行账户信息',
+    primary key (PaymentMethodId)
+) comment '支付方式';
+
+create table if not exists Payroll_Record
+(
+    PayrollId      char(14)       not null comment '工资单编号',
+    EmployeeId     char(8)        not null comment '员工编号',
+    PayrollDate    date           not null comment '发放日期',
+    PaymentMethod  char(4)        not null comment '支付方式',
+    BasicSalary    decimal(10, 2) not null comment '基本工资',
+    TotalBonus     decimal(10, 2) not null comment '总奖金',
+    TotalDeduction decimal(10, 2) not null comment '总扣款',
+    NetSalary      decimal(10, 2) not null comment '实发工资',
+    primary key (PayrollId),
+    foreign key (EmployeeId) references Employee (EmployeeId),
+    foreign key (PaymentMethod) references Payment_Method (PaymentMethodId)
+) comment '工资单记录';
+
+drop trigger if exists trg_Bonus_type;
+drop trigger if exists trg_Deduction_type;
+drop procedure if exists checkDateTimeRange;
+drop function if exists calcDuration;
+drop trigger if exists trg_Absence_calc;
+drop trigger if exists trg_Absence_calc_update;
+drop trigger if exists trg_Overtime_calc;
+drop trigger if exists trg_Overtime_calc_update;
+
+delimiter $$
+create trigger trg_Bonus_type
+    before insert
+    on Bonus_Record
+    for each row
+begin
+    if (select ItemType from Payroll_Items where ItemId = new.BonusType) = 0 then
+        signal sqlstate '45000' set message_text = 'BonusType must refer to a reward item';
+    end if;
+end $$
+
+create trigger trg_Deduction_type
+    before insert
+    on Deduction_Record
+    for each row
+begin
+    if (select ItemType from Payroll_Items where ItemId = new.DeductionType) = 1 then
+        signal sqlstate '45000' set message_text = 'DeductionType must refer to a deduction item';
+    end if;
+end $$
+
+create procedure checkDateTimeRange(
+    in s datetime,
+    in e datetime
+)
+begin
+    if e < s then
+        signal sqlstate '45000'
+            set message_text = 'EndDateTime must be >= StartDateTime';
+    end if;
+end $$
+
+create function calcDuration(
+    s datetime,
+    e datetime
+)
+    returns int
+    deterministic
+begin
+    return timestampdiff(minute, s, e);
+end $$
+
+create trigger trg_Absence_calc
     before insert
     on Absence_Record
     for each row
 begin
-    call checkDateRange(new.StartDate, new.EndDate);
-end;
+    call checkDateTimeRange(new.StartDateTime, new.EndDateTime);
+    set new.Duration = calcDuration(new.StartDateTime, new.EndDateTime);
+end $$
 
-create table Overtime_Record
-(
-    OvertimeId char(10)     not null auto_increment comment '记录编号',
-    EmployeeId char(8)      not null comment '员工编号',
-    StartDate  date         not null comment '加班开始时间',
-    EndDate    date         not null comment '加班结束时间',
-    Duration   int unsigned not null comment '加班时长',
-    Attachment text comment '证明材料',
-    primary key (OvertimeId),
-    foreign key (EmployeeId) references Employee (EmployeeId)
-) comment '加班记录';
+create trigger trg_Absence_calc_update
+    before update
+    on Absence_Record
+    for each row
+begin
+    call checkDateTimeRange(new.StartDateTime, new.EndDateTime);
+    set new.Duration = calcDuration(new.StartDateTime, new.EndDateTime);
+end $$
 
-create trigger trg_Overtime_date
+create trigger trg_Overtime_calc
     before insert
     on Overtime_Record
     for each row
 begin
-    call checkDateRange(new.StartDate, new.EndDate);
-end;
+    call checkDateTimeRange(new.StartDateTime, new.EndDateTime);
+    set new.Duration = calcDuration(new.StartDateTime, new.EndDateTime);
+end $$
+
+create trigger trg_Overtime_calc_update
+    before update
+    on Overtime_Record
+    for each row
+begin
+    call checkDateTimeRange(new.StartDateTime, new.EndDateTime);
+    set new.Duration = calcDuration(new.StartDateTime, new.EndDateTime);
+end $$
+delimiter ;
