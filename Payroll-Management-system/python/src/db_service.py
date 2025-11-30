@@ -44,6 +44,35 @@ def fetch_table_rows(table: str, *, host: str, port: int, user: str, password: s
             return cursor.fetchall()
 
 
+def fetch_unsettled_totals(
+        employee_id: str,
+        payroll_date: str,
+        *,
+        host: str,
+        port: int,
+        user: str,
+        password: str,
+        database: str,
+) -> tuple[float, float]:
+    """Sum unsettled bonus/deduction amounts before a given payroll date for an employee."""
+
+    bonus_sql = (
+        "SELECT COALESCE(SUM(BonusAmount), 0) AS total "
+        "FROM `Bonus_Record` WHERE EmployeeId=%s AND IsSettled=0 AND BonusDate<=%s"
+    )
+    deduction_sql = (
+        "SELECT COALESCE(SUM(DeductionAmount), 0) AS total "
+        "FROM `Deduction_Record` WHERE EmployeeId=%s AND IsSettled=0 AND DeductionDate<=%s"
+    )
+    with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(bonus_sql, (employee_id, payroll_date))
+            bonus_row = cursor.fetchone() or {"total":0}
+            cursor.execute(deduction_sql, (employee_id, payroll_date))
+            deduction_row = cursor.fetchone() or {"total":0}
+    return float(bonus_row.get("total", 0)), float(deduction_row.get("total", 0))
+
+
 def fetch_record_by_column(
         table: str,
         column: str,

@@ -33,6 +33,7 @@ if str(BASE_DIR) not in sys.path:
 from db_service import (
     delete_row,
     fetch_table_constraints,
+    fetch_unsettled_totals,
     fetch_record_by_column,
     fetch_table_rows,
     fetch_table_schema,
@@ -103,6 +104,8 @@ class DataManagerGUI:
         self.fk_tooltip: tk.Toplevel | None = None
         self.fk_hover_target: tuple[str, str] | None = None
         self.fk_cache: dict[tuple[str, str, str], dict] = {}
+        self.fk_option_records: dict[str, dict[str, dict]] = {}
+        self.field_types: dict[str, str] = {}
 
         self._build_generator_form()
         self._build_db_config()
@@ -162,10 +165,12 @@ class DataManagerGUI:
         db_entry.grid(row=0, column=9, sticky="w", padx=5)
 
         self.db_entries = [host_entry, port_entry, user_entry, pass_entry, db_entry]
-
         ttk.Button(frm, text="刷新表列表", command=self._refresh_tables).grid(row=1, column=0, padx=5, pady=5)
         ttk.Button(frm, text="加载当前表", command=self._load_table_data).grid(row=1, column=1, padx=5, pady=5)
-        ttk.Button(frm, text="加载员工表", command=self._load_employees).grid(row=1, column=2, padx=5, pady=5)
+        ttk.Label(frm, text="当前表").grid(row=1, column=2, sticky="e")
+        self.table_combo = ttk.Combobox(frm, textvariable=self.table_var, width=26, state="readonly")
+        self.table_combo.grid(row=1, column=3, padx=5, pady=5, sticky="w")
+        frm.grid_columnconfigure(4, weight=1)
 
     def _set_icon(self) -> None:
         icon_path = self.base_dir / "static" / "icon.png"
@@ -192,16 +197,13 @@ class DataManagerGUI:
         frm = ttk.Frame(self.root, padding=(10, 0))
         frm.pack(fill="x")
 
-        ttk.Label(frm, text="当前表").grid(row=0, column=0, sticky="w")
-        self.table_combo = ttk.Combobox(frm, textvariable=self.table_var, width=30, state="readonly")
-        self.table_combo.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-
-        ttk.Label(frm, text="搜索关键词").grid(row=0, column=2, sticky="e")
-        ttk.Entry(frm, textvariable=self.search_var, width=30).grid(row=0, column=3, sticky="w", padx=5)
-        ttk.Button(frm, text="应用搜索", command=self._apply_search).grid(row=0, column=4, padx=5)
-        ttk.Button(frm, text="清除筛选", command=self._clear_filters).grid(row=0, column=5, padx=5)
-        ttk.Button(frm, text="查看属性", command=self._show_table_attributes).grid(row=0, column=6, padx=5)
-        ttk.Button(frm, text="查看约束", command=self._show_table_constraints).grid(row=0, column=7, padx=5)
+        ttk.Label(frm, text="搜索关键词").grid(row=0, column=0, sticky="e")
+        ttk.Entry(frm, textvariable=self.search_var, width=30).grid(row=0, column=1, sticky="w", padx=5)
+        ttk.Button(frm, text="应用搜索", command=self._apply_search).grid(row=0, column=2, padx=5)
+        ttk.Button(frm, text="清除筛选", command=self._clear_filters).grid(row=0, column=3, padx=5)
+        ttk.Button(frm, text="查看属性", command=self._show_table_attributes).grid(row=0, column=4, padx=5)
+        ttk.Button(frm, text="查看约束", command=self._show_table_constraints).grid(row=0, column=5, padx=5)
+        frm.grid_columnconfigure(6, weight=1)
 
     def _build_table(self) -> None:
         container = ttk.Frame(self.root)
@@ -230,38 +232,13 @@ class DataManagerGUI:
         self.dynamic_fields = ttk.Frame(self.form_frame)
         self.dynamic_fields.pack(fill="x", pady=5)
 
-        self.emp_form = ttk.Frame(self.form_frame)
-        self.emp_form.pack(fill="x", pady=5)
-
-        ttk.Label(self.emp_form, text="员工ID").grid(row=0, column=0, sticky="w")
-        ttk.Entry(self.emp_form, textvariable=self.emp_id_var, width=12).grid(row=0, column=1, sticky="w", padx=5)
-        ttk.Label(self.emp_form, text="姓名").grid(row=0, column=2, sticky="e")
-        ttk.Entry(self.emp_form, textvariable=self.emp_name_var, width=18).grid(row=0, column=3, sticky="w", padx=5)
-        ttk.Label(self.emp_form, text="部门").grid(row=0, column=4, sticky="e")
-        ttk.Entry(self.emp_form, textvariable=self.emp_dept_var, width=18).grid(row=0, column=5, sticky="w", padx=5)
-        ttk.Label(self.emp_form, text="职位").grid(row=0, column=6, sticky="e")
-        ttk.Entry(self.emp_form, textvariable=self.emp_pos_var, width=18).grid(row=0, column=7, sticky="w", padx=5)
-        ttk.Label(self.emp_form, text="薪资").grid(row=1, column=0, sticky="w", pady=(8, 2))
-        ttk.Entry(self.emp_form, textvariable=self.emp_salary_var, width=12).grid(row=1, column=1, sticky="w", padx=5,
-                                                                                  pady=(8, 2))
-        ttk.Label(self.emp_form, text="入职日期(YYYY-MM-DD)").grid(row=1, column=2, sticky="e", pady=(8, 2))
-        ttk.Entry(self.emp_form, textvariable=self.emp_join_var, width=18).grid(row=1, column=3, sticky="w", padx=5,
-                                                                                pady=(8, 2))
-
-        btns = ttk.Frame(self.form_frame)
-        btns.pack(fill="x", pady=5)
-        ttk.Button(btns, text="从库加载员工", command=self._load_employees).grid(row=0, column=0, padx=5)
-        ttk.Button(btns, text="新增员工", command=self._create_employee).grid(row=0, column=1, padx=5)
-        ttk.Button(btns, text="更新员工", command=self._update_employee).grid(row=0, column=2, padx=5)
-        ttk.Button(btns, text="删除员工", command=self._delete_employee).grid(row=0, column=3, padx=5)
-        ttk.Button(btns, text="CSV 导入员工", command=self._import_csv_to_db).grid(row=0, column=4, padx=5)
-        ttk.Button(btns, text="CSV 导出员工", command=self._export_csv_from_db).grid(row=0, column=5, padx=5)
-
         db_btns = ttk.Frame(self.form_frame)
         db_btns.pack(fill="x", pady=5)
         ttk.Button(db_btns, text="新增记录", command=self._create_record).grid(row=0, column=0, padx=5)
         ttk.Button(db_btns, text="更新记录", command=self._update_record).grid(row=0, column=1, padx=5)
         ttk.Button(db_btns, text="删除记录", command=self._delete_record).grid(row=0, column=2, padx=5)
+        ttk.Button(db_btns, text="CSV 导入", command=self._import_table_csv).grid(row=0, column=3, padx=5)
+        ttk.Button(db_btns, text="CSV 导出", command=self._export_table_csv).grid(row=0, column=4, padx=5)
 
     def _build_status_bar(self) -> None:
         self.status_label = ttk.Label(self.root, textvariable=self.status_var, anchor="w", padding=5)
@@ -526,9 +503,11 @@ class DataManagerGUI:
             cfg = self._get_db_config()
             self.table_schema = fetch_table_schema(table, **cfg)
             self.table_columns = [c["Field"] for c in self.table_schema]
+            self.field_types = {c["Field"]:c.get("Type", "") for c in self.table_schema}
             self.key_column = next((c["Field"] for c in self.table_schema if c.get("Key") == "PRI"),
                                    self.table_columns[0])
             self.foreign_keys = self._extract_foreign_keys(fetch_table_constraints(table, **cfg))
+            self.fk_option_records = {}
             rows = normalize_records(fetch_table_rows(table, **cfg))
             self.db_records = rows
             self.filtered_records = rows
@@ -559,16 +538,127 @@ class DataManagerGUI:
         for idx, col in enumerate(self.table_columns):
             var = tk.StringVar()
             self.field_vars[col] = var
-            ttk.Label(self.dynamic_fields, text=col).grid(row=idx // 4, column=(idx % 4) * 2, sticky="e", padx=5,
-                                                          pady=2)
-            ttk.Entry(self.dynamic_fields, textvariable=var, width=20).grid(
-                row=idx // 4, column=(idx % 4) * 2 + 1, sticky="w", padx=5, pady=2
-            )
+            label_text = f"{col} ({self.field_types.get(col, '')})" if self.field_types else col
+            ttk.Label(self.dynamic_fields, text=label_text).grid(row=idx // 4, column=(idx % 4) * 2, sticky="e",
+                                                                  padx=5, pady=2)
+            holder = ttk.Frame(self.dynamic_fields)
+            holder.grid(row=idx // 4, column=(idx % 4) * 2 + 1, sticky="w", padx=5, pady=2)
+
+            if self._should_use_fk_selector(col):
+                options = self._get_fk_options(col)
+                combo = ttk.Combobox(holder, textvariable=var, state="readonly", width=18,
+                                     values=[opt["key"] for opt in options])
+                combo.pack(side="left")
+                preview = ttk.Label(holder, text="预览", relief="groove", padding=(4, 2))
+                preview.pack(side="left", padx=4)
+                preview.bind("<Enter>", lambda e, c=col:self._show_field_preview(e, c))
+                preview.bind("<Leave>", lambda _ :self._hide_fk_tooltip())
+            elif self._is_date_field(col):
+                ttk.Entry(holder, textvariable=var, width=18, state="readonly").pack(side="left")
+                ttk.Button(holder, text="选日期", command=lambda v=var:self._open_date_picker(v)).pack(side="left", padx=4)
+            else:
+                ttk.Entry(holder, textvariable=var, width=20).pack(side="left")
+            if self.field_types.get(col):
+                ttk.Label(holder, text=self.field_types[col], foreground="#666").pack(side="left", padx=4)
 
     def _collect_dynamic_data(self) -> dict:
         if not self.field_vars:
             raise ValueError("请先加载表以生成动态表单。")
-        return {col:var.get().strip() for col, var in self.field_vars.items()}
+        data = {col:var.get().strip() for col, var in self.field_vars.items()}
+        if self.table_var.get() == "Payroll_Record":
+            employee_id = data.get("EmployeeId")
+            payroll_date = data.get("PayrollDate")
+            if employee_id and payroll_date:
+                cfg = self._get_db_config()
+                bonus_total, deduction_total = fetch_unsettled_totals(employee_id, payroll_date, **cfg)
+                data["TotalBonus"] = f"{bonus_total:.2f}"
+                data["TotalDeduction"] = f"{deduction_total:.2f}"
+                try:
+                    basic_salary = float(data.get("BasicSalary", 0))
+                except ValueError as exc:
+                    raise ValueError("BasicSalary 必须为数字。") from exc
+                net_salary = basic_salary + bonus_total - deduction_total
+                data["NetSalary"] = f"{net_salary:.2f}"
+                if "TotalBonus" in self.field_vars:
+                    self.field_vars["TotalBonus"].set(data["TotalBonus"])
+                if "TotalDeduction" in self.field_vars:
+                    self.field_vars["TotalDeduction"].set(data["TotalDeduction"])
+                if "NetSalary" in self.field_vars:
+                    self.field_vars["NetSalary"].set(data["NetSalary"])
+        return data
+
+    def _should_use_fk_selector(self, column: str) -> bool:
+        if column == "EmployeeId":
+            return False
+        return column in self.foreign_keys
+
+    def _is_date_field(self, column: str) -> bool:
+        type_info = self.field_types.get(column, "").lower()
+        return type_info.startswith("date") or "datetime" in type_info
+
+    def _get_fk_options(self, column: str) -> list[dict]:
+        ref_table, ref_column = self.foreign_keys[column]
+        cfg = self._get_db_config()
+        records = fetch_table_rows(ref_table, **cfg)
+        if ref_table == "Event":
+            expected = 1 if "Overtime" in column else 0
+            records = [r for r in records if int(r.get("EventType", 0)) == expected]
+        if ref_table == "Payroll_Item":
+            expected = 1 if "Bonus" in column else 0
+            records = [r for r in records if int(r.get("ItemType", 0)) == expected]
+        options: list[dict] = []
+        for record in records:
+            value = str(record.get(ref_column, ""))
+            if not value:
+                continue
+            label = record.get("EventName") or record.get("ItemName") or record.get("PaymentMethodName") or value
+            display = value if label == value else f"{value} - {label}"
+            options.append({"value":display if display else value, "record":record, "key":value})
+        self.fk_option_records[column] = {opt["key"]:opt["record"] for opt in options}
+        return options
+
+    def _open_date_picker(self, target_var: tk.StringVar) -> None:
+        now = datetime.now()
+        top = tk.Toplevel(self.root)
+        top.title("选择日期")
+        top.grab_set()
+
+        year_var = tk.IntVar(value=now.year)
+        month_var = tk.IntVar(value=now.month)
+        day_var = tk.IntVar(value=now.day)
+
+        ttk.Label(top, text="年份").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Spinbox(top, from_=1970, to=2100, textvariable=year_var, width=8).grid(row=0, column=1, padx=5, pady=5)
+        ttk.Label(top, text="月份").grid(row=1, column=0, padx=5, pady=5)
+        ttk.Spinbox(top, from_=1, to=12, textvariable=month_var, width=5).grid(row=1, column=1, padx=5, pady=5)
+        ttk.Label(top, text="日期").grid(row=2, column=0, padx=5, pady=5)
+        ttk.Spinbox(top, from_=1, to=31, textvariable=day_var, width=5).grid(row=2, column=1, padx=5, pady=5)
+
+        def _apply_date() -> None:
+            try:
+                date_obj = datetime(year_var.get(), month_var.get(), day_var.get()).date()
+                target_var.set(date_obj.isoformat())
+                top.destroy()
+            except ValueError:
+                messagebox.showerror("日期错误", "请输入有效的日期。")
+
+        ttk.Button(top, text="确定", command=_apply_date).grid(row=3, column=0, columnspan=2, pady=8)
+
+    def _show_field_preview(self, event: tk.Event, column: str) -> None:
+        value = self.field_vars.get(column, tk.StringVar()).get().strip()
+        if not value:
+            return
+        record = self.fk_option_records.get(column, {}).get(value)
+        ref_table, ref_column = self.foreign_keys.get(column, (column, ""))
+        if record is None and column in self.foreign_keys:
+            try:
+                cfg = self._get_db_config()
+                record = fetch_record_by_column(ref_table, ref_column, value, **cfg)
+            except Exception:
+                record = None
+        if not record:
+            return
+        self._show_fk_tooltip(event, ref_table, record)
 
     def _create_record(self) -> None:
         if not self.table_var.get():
@@ -625,6 +715,55 @@ class DataManagerGUI:
         except Exception as exc:
             self._set_status(str(exc), is_error=True)
             messagebox.showerror("数据库错误", str(exc))
+
+    def _export_table_csv(self) -> None:
+        if self.table_mode != "db" or not self.table_columns:
+            messagebox.showinfo("提示", "请先加载数据库表后再导出。")
+            return
+        records = self.filtered_records or self.db_records
+        if not records:
+            messagebox.showinfo("提示", "当前表没有可导出的记录。")
+            return
+        path = filedialog.asksaveasfilename(
+            title="导出当前表 CSV", defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        with Path(path).open("w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=self.table_columns)
+            writer.writeheader()
+            for record in records:
+                writer.writerow({col:record.get(col, "") for col in self.table_columns})
+        self._set_status(f"导出 {len(records)} 条记录到 {path}。")
+        messagebox.showinfo("已保存", f"已导出 {len(records)} 条记录。")
+
+    def _import_table_csv(self) -> None:
+        if self.table_mode != "db" or not self.table_columns:
+            messagebox.showinfo("提示", "请先加载数据库表后再导入。")
+            return
+        path = filedialog.askopenfilename(
+            title="选择要导入的 CSV", filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+        )
+        if not path:
+            return
+        try:
+            cfg = self._get_db_config()
+            imported = 0
+            with Path(path).open("r", encoding="utf-8", newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if not row:
+                        continue
+                    payload = {col:row.get(col, "") for col in self.table_columns if col in row}
+                    insert_row(self.table_var.get(), payload, **cfg)
+                    imported += 1
+            self._load_table_data()
+            messagebox.showinfo("导入完成", f"成功导入 {imported} 条记录。")
+            self._set_status(f"已导入 {imported} 条记录。")
+        except Exception as exc:
+            self._set_status(str(exc), is_error=True)
+            messagebox.showerror("导入失败", str(exc))
 
     def _apply_search(self) -> None:
         keyword = self.search_var.get().strip().lower()
@@ -746,14 +885,6 @@ class DataManagerGUI:
             for col, value in zip(columns, values):
                 if col in self.field_vars:
                     self.field_vars[col].set(value)
-        if self.table_mode == "db":
-            if len(values) >= 6:
-                self.emp_id_var.set(values[0])
-                self.emp_name_var.set(values[1])
-                self.emp_dept_var.set(values[2])
-                self.emp_pos_var.set(values[3])
-                self.emp_salary_var.set(values[4])
-                self.emp_join_var.set(values[5])
 
     def _on_tree_double_click(self, event: tk.Event) -> None:
         if self.table_mode != "db" or not self.foreign_keys:
