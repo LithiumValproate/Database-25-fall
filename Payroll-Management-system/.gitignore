@@ -1,4 +1,4 @@
 *.docx
 *.pptx
 vendor/
-!/Report/scratch.md
+dump/
