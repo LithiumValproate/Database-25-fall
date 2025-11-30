@@ -804,6 +804,8 @@ class DataManagerGUI:
         self._hide_fk_tooltip()
         tip = tk.Toplevel(self.root)
         tip.wm_overrideredirect(True)
+        tip.configure(background="#f7f7f7")
+        tip.attributes("-topmost", True)
         x = self.root.winfo_pointerx() + 12
         y = self.root.winfo_pointery() + 12
         tip.wm_geometry(f"+{x}+{y}")
@@ -813,6 +815,7 @@ class DataManagerGUI:
             text=f"{table} 记录\n{content}",
             justify="left",
             background="#f7f7f7",
+            foreground="#111",
             relief="solid",
             borderwidth=1,
             padx=8,
