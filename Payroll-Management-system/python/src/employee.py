@@ -153,8 +153,8 @@ def insert_into_mysql(
 
 
 def main():
-    default_names_path = Path(__file__).with_name('static') / 'names.txt'
-    default_jobs_path = Path(__file__).with_name('static') / 'jobs.csv'
+    default_names_path = Path(__file__).parent.parent / 'static' / 'names.txt'
+    default_jobs_path = Path(__file__).parent.parent / 'static' /'jobs.csv'
 
     use_defaults = ask_use_defaults()
     names_path = default_names_path if use_defaults else get_file_path(default_names_path, 'names')
