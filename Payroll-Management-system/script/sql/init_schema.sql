@@ -112,7 +112,7 @@ create table Payment_Method
 
 create table Payroll_Record
 (
-    PayrollId      char(14)       not null comment '工资单编号',
+    PayrollId      char(16)       not null comment '工资单编号',
     EmployeeId     char(8)        not null comment '员工编号',
     PayrollDate    date           not null comment '发放日期',
     PaymentMethod  char(3)        not null comment '支付方式',
