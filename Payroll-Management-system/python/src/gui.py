@@ -6,6 +6,26 @@ from pathlib import Path
 from tkinter import colorchooser, filedialog, messagebox, ttk
 from typing import List
 
+DEFAULT_ENV_FILE = ".env"
+
+
+def _read_env_file(path: Path) -> dict[str, str]:
+    """Simple key=value reader for local default credentials."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+
+    values: dict[str, str] = {}
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
@@ -43,6 +63,7 @@ class DataManagerGUI:
         self.root.geometry("1100x720")
 
         self.base_dir = BASE_DIR
+        self._set_icon()
         static_dir = BASE_DIR / "static"
         self.names_path = tk.StringVar(value=str(static_dir / "names.txt"))
         self.jobs_path = tk.StringVar(value=str(static_dir / "jobs.csv"))
@@ -55,6 +76,7 @@ class DataManagerGUI:
         self.pass_var = tk.StringVar()
         self.db_var = tk.StringVar()
         self.db_entries: list[ttk.Entry] = []
+        self._load_default_db_credentials()
 
         self.employees: list[dict] = []
         self.db_records: list[dict] = []
@@ -145,6 +167,27 @@ class DataManagerGUI:
         ttk.Button(frm, text="加载当前表", command=self._load_table_data).grid(row=1, column=1, padx=5, pady=5)
         ttk.Button(frm, text="加载员工表", command=self._load_employees).grid(row=1, column=2, padx=5, pady=5)
 
+    def _set_icon(self) -> None:
+        icon_path = self.base_dir / "static" / "icon.png"
+        if not icon_path.exists():
+            return
+        try:
+            icon = tk.PhotoImage(file=str(icon_path))
+        except tk.TclError:
+            return
+        self.root.iconphoto(True, icon)
+        self._icon_image = icon  # keep a reference to avoid GC
+
+    def _load_default_db_credentials(self) -> None:
+        env_path = self.base_dir / "static" / DEFAULT_ENV_FILE
+        env_values = _read_env_file(env_path)
+        if not env_values:
+            return
+
+        self.user_var.set(env_values.get("USR", self.user_var.get()))
+
+        self.db_var.set(env_values.get("DB", self.db_var.get()))
+
     def _build_table_toolbar(self) -> None:
         frm = ttk.Frame(self.root, padding=(10, 0))
         frm.pack(fill="x")
@@ -168,7 +211,7 @@ class DataManagerGUI:
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-1>", self._on_tree_double_click)
         self.tree.bind("<Motion>", self._on_tree_motion)
-        self.tree.bind("<Leave>", lambda _: self._hide_fk_tooltip())
+        self.tree.bind("<Leave>", lambda _:self._hide_fk_tooltip())
 
         vsb = ttk.Scrollbar(container, orient="vertical", command=self.tree.yview)
         hsb = ttk.Scrollbar(container, orient="horizontal", command=self.tree.xview)
@@ -199,9 +242,11 @@ class DataManagerGUI:
         ttk.Label(self.emp_form, text="职位").grid(row=0, column=6, sticky="e")
         ttk.Entry(self.emp_form, textvariable=self.emp_pos_var, width=18).grid(row=0, column=7, sticky="w", padx=5)
         ttk.Label(self.emp_form, text="薪资").grid(row=1, column=0, sticky="w", pady=(8, 2))
-        ttk.Entry(self.emp_form, textvariable=self.emp_salary_var, width=12).grid(row=1, column=1, sticky="w", padx=5, pady=(8, 2))
+        ttk.Entry(self.emp_form, textvariable=self.emp_salary_var, width=12).grid(row=1, column=1, sticky="w", padx=5,
+                                                                                  pady=(8, 2))
         ttk.Label(self.emp_form, text="入职日期(YYYY-MM-DD)").grid(row=1, column=2, sticky="e", pady=(8, 2))
-        ttk.Entry(self.emp_form, textvariable=self.emp_join_var, width=18).grid(row=1, column=3, sticky="w", padx=5, pady=(8, 2))
+        ttk.Entry(self.emp_form, textvariable=self.emp_join_var, width=18).grid(row=1, column=3, sticky="w", padx=5,
+                                                                                pady=(8, 2))
 
         btns = ttk.Frame(self.form_frame)
         btns.pack(fill="x", pady=5)
@@ -276,7 +321,7 @@ class DataManagerGUI:
         self.tree.configure(columns=columns)
 
         for col in columns:
-            self.tree.heading(col, text=col, command=lambda c=col: self._on_heading_click(c))
+            self.tree.heading(col, text=col, command=lambda c=col:self._on_heading_click(c))
             self.tree.column(col, width=120, anchor="center")
 
         for row in self.tree.get_children():
@@ -321,7 +366,8 @@ class DataManagerGUI:
             return
 
         path = filedialog.asksaveasfilename(
-            title="保存 CSV", defaultextension=".csv", filetypes=[("CSV files", "*.csv"), ("All files", "*.*")], initialdir=self.base_dir
+            title="保存 CSV", defaultextension=".csv", filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            initialdir=self.base_dir
         )
         if not path:
             return
@@ -336,11 +382,11 @@ class DataManagerGUI:
 
     def _get_db_config(self) -> dict:
         cfg = {
-            "host": self.host_var.get() or "localhost",
-            "port": int(self.port_var.get() or 3306),
-            "user": self.user_var.get(),
-            "password": self.pass_var.get(),
-            "database": self.db_var.get(),
+            "host":self.host_var.get() or "localhost",
+            "port":int(self.port_var.get() or 3306),
+            "user":self.user_var.get(),
+            "password":self.pass_var.get(),
+            "database":self.db_var.get(),
         }
         missing = [k for k, v in cfg.items() if k not in {"port", "host"} and not v]
         if missing:
@@ -367,12 +413,12 @@ class DataManagerGUI:
             raise ValueError("入职日期格式应为 YYYY-MM-DD。") from exc
 
         return {
-            "id": emp_id,
-            "name": name,
-            "dept": dept,
-            "position": position,
-            "salary": salary,
-            "join_date": join_date,
+            "id":emp_id,
+            "name":name,
+            "dept":dept,
+            "position":position,
+            "salary":salary,
+            "join_date":join_date,
         }
 
     def _load_employees(self) -> None:
@@ -480,7 +526,8 @@ class DataManagerGUI:
             cfg = self._get_db_config()
             self.table_schema = fetch_table_schema(table, **cfg)
             self.table_columns = [c["Field"] for c in self.table_schema]
-            self.key_column = next((c["Field"] for c in self.table_schema if c.get("Key") == "PRI"), self.table_columns[0])
+            self.key_column = next((c["Field"] for c in self.table_schema if c.get("Key") == "PRI"),
+                                   self.table_columns[0])
             self.foreign_keys = self._extract_foreign_keys(fetch_table_constraints(table, **cfg))
             rows = normalize_records(fetch_table_rows(table, **cfg))
             self.db_records = rows
@@ -512,7 +559,8 @@ class DataManagerGUI:
         for idx, col in enumerate(self.table_columns):
             var = tk.StringVar()
             self.field_vars[col] = var
-            ttk.Label(self.dynamic_fields, text=col).grid(row=idx // 4, column=(idx % 4) * 2, sticky="e", padx=5, pady=2)
+            ttk.Label(self.dynamic_fields, text=col).grid(row=idx // 4, column=(idx % 4) * 2, sticky="e", padx=5,
+                                                          pady=2)
             ttk.Entry(self.dynamic_fields, textvariable=var, width=20).grid(
                 row=idx // 4, column=(idx % 4) * 2 + 1, sticky="w", padx=5, pady=2
             )
@@ -520,7 +568,7 @@ class DataManagerGUI:
     def _collect_dynamic_data(self) -> dict:
         if not self.field_vars:
             raise ValueError("请先加载表以生成动态表单。")
-        return {col: var.get().strip() for col, var in self.field_vars.items()}
+        return {col:var.get().strip() for col, var in self.field_vars.items()}
 
     def _create_record(self) -> None:
         if not self.table_var.get():
@@ -609,13 +657,13 @@ class DataManagerGUI:
                 return
             rows = [
                 {
-                    "Field": col.get("Field", ""),
-                    "Type": col.get("Type", ""),
-                    "Null": col.get("Null", ""),
-                    "Key": col.get("Key", ""),
-                    "Default": "" if col.get("Default") is None else col.get("Default"),
-                    "Extra": col.get("Extra", ""),
-                    "Comment": col.get("Comment", ""),
+                    "Field":col.get("Field", ""),
+                    "Type":col.get("Type", ""),
+                    "Null":col.get("Null", ""),
+                    "Key":col.get("Key", ""),
+                    "Default":"" if col.get("Default") is None else col.get("Default"),
+                    "Extra":col.get("Extra", ""),
+                    "Comment":col.get("Comment", ""),
                 }
                 for col in schema
             ]
@@ -656,11 +704,11 @@ class DataManagerGUI:
                     )
                 rows.append(
                     {
-                        "constraint_name": item.get("constraint_name", ""),
-                        "constraint_type": item.get("constraint_type", ""),
-                        "column_name": item.get("column_name", "") or "",
-                        "reference": reference,
-                        "check_clause": item.get("check_clause", "") or "",
+                        "constraint_name":item.get("constraint_name", ""),
+                        "constraint_type":item.get("constraint_type", ""),
+                        "column_name":item.get("column_name", "") or "",
+                        "reference":reference,
+                        "check_clause":item.get("check_clause", "") or "",
                     }
                 )
             columns = [
@@ -682,7 +730,7 @@ class DataManagerGUI:
             return
         ascending = not self.sort_state.get(column, True)
         self.sort_state[column] = ascending
-        sorted_records = sorted(records, key=lambda r: str(r.get(column, "")), reverse=not ascending)
+        sorted_records = sorted(records, key=lambda r:str(r.get(column, "")), reverse=not ascending)
         self.filtered_records = sorted_records
         self._render_table(sorted_records)
         arrow = "↑" if ascending else "↓"
@@ -832,12 +880,12 @@ class DataManagerGUI:
 
     def _clear_form_fields(self) -> None:
         for var in (
-            self.emp_id_var,
-            self.emp_name_var,
-            self.emp_dept_var,
-            self.emp_pos_var,
-            self.emp_salary_var,
-            self.emp_join_var,
+                self.emp_id_var,
+                self.emp_name_var,
+                self.emp_dept_var,
+                self.emp_pos_var,
+                self.emp_salary_var,
+                self.emp_join_var,
         ):
             var.set("")
         for var in self.field_vars.values():
