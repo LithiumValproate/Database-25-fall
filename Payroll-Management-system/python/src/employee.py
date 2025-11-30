@@ -152,6 +152,165 @@ def insert_into_mysql(
         connection.close()
 
 
+def _connect_mysql(*, host: str, port: int, user: str, password: str, database: str):
+    return pymysql.connect(
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database,
+        charset='utf8mb4',
+        autocommit=False,
+    )
+
+
+def fetch_employees(*, host: str, port: int, user: str, password: str, database: str) -> list[dict]:
+    connection = _connect_mysql(host=host, port=port, user=user, password=password, database=database)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'SELECT EmployeeId, EmployeeName, Department, Position, BasicSalary, JoinDate FROM Employee'
+            )
+            rows = cursor.fetchall()
+        connection.commit()
+    finally:
+        connection.close()
+
+    employees: list[dict] = []
+    for row in rows:
+        emp_id, name, dept, position, salary, join_date = row
+        employees.append(
+            {
+                'id': emp_id,
+                'name': name,
+                'dept': dept,
+                'position': position,
+                'salary': float(salary),
+                'join_date': join_date.isoformat() if hasattr(join_date, 'isoformat') else join_date,
+            }
+        )
+    return employees
+
+
+def create_employee(
+    record: dict, *, host: str, port: int, user: str, password: str, database: str
+) -> None:
+    connection = _connect_mysql(host=host, port=port, user=user, password=password, database=database)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'INSERT INTO Employee (EmployeeId, EmployeeName, Department, Position, BasicSalary, JoinDate) '
+                'VALUES (%s, %s, %s, %s, %s, %s)',
+                (
+                    record['id'],
+                    record['name'],
+                    record['dept'],
+                    record['position'],
+                    record['salary'],
+                    record['join_date'],
+                ),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def update_employee(
+    record: dict, *, host: str, port: int, user: str, password: str, database: str
+) -> None:
+    connection = _connect_mysql(host=host, port=port, user=user, password=password, database=database)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'UPDATE Employee SET EmployeeName=%s, Department=%s, Position=%s, BasicSalary=%s, JoinDate=%s '
+                'WHERE EmployeeId=%s',
+                (
+                    record['name'],
+                    record['dept'],
+                    record['position'],
+                    record['salary'],
+                    record['join_date'],
+                    record['id'],
+                ),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def delete_employee(emp_id: str, *, host: str, port: int, user: str, password: str, database: str) -> None:
+    connection = _connect_mysql(host=host, port=port, user=user, password=password, database=database)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('DELETE FROM Employee WHERE EmployeeId=%s', (emp_id,))
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def import_employees_from_csv(
+    path: Path, *, host: str, port: int, user: str, password: str, database: str
+) -> list[dict]:
+    if not path.is_file():
+        raise FileNotFoundError(f'File not found: {path}')
+
+    with path.open(encoding='utf-8', newline='') as f:
+        reader = csv.DictReader(f)
+        records = [
+            {
+                'id': row.get('id') or row.get('EmployeeId'),
+                'name': row.get('name') or row.get('EmployeeName'),
+                'dept': row.get('dept') or row.get('Department'),
+                'position': row.get('position') or row.get('Position'),
+                'salary': float(row.get('salary') or row.get('BasicSalary') or 0),
+                'join_date': row.get('join_date') or row.get('JoinDate'),
+            }
+            for row in reader
+            if row
+        ]
+
+    if not records:
+        raise ValueError('CSV file is empty or invalid.')
+
+    connection = _connect_mysql(host=host, port=port, user=user, password=password, database=database)
+    try:
+        with connection.cursor() as cursor:
+            sql = (
+                'INSERT INTO Employee (EmployeeId, EmployeeName, Department, Position, BasicSalary, JoinDate) '
+                'VALUES (%s, %s, %s, %s, %s, %s) '
+                'ON DUPLICATE KEY UPDATE '
+                'EmployeeName=VALUES(EmployeeName), Department=VALUES(Department), Position=VALUES(Position), '
+                'BasicSalary=VALUES(BasicSalary), JoinDate=VALUES(JoinDate)'
+            )
+            payload = [
+                (
+                    r['id'],
+                    r['name'],
+                    r['dept'],
+                    r['position'],
+                    r['salary'],
+                    r['join_date'],
+                )
+                for r in records
+            ]
+            cursor.executemany(sql, payload)
+        connection.commit()
+    finally:
+        connection.close()
+
+    return records
+
+
+def export_employees_to_csv(records: Iterable[dict], path: Path) -> int:
+    fieldnames = ('id', 'name', 'dept', 'position', 'salary', 'join_date')
+    rows = list(records)
+    with path.open('w', encoding='utf-8', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    return len(rows)
+
+
 def main():
     default_names_path = Path(__file__).with_name('static') / 'names.txt'
     default_jobs_path = Path(__file__).with_name('static') / 'jobs.csv'

@@ -10,11 +10,17 @@ if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
 from employee import (  # type: ignore
+    create_employee,
+    delete_employee,
+    export_employees_to_csv,
+    fetch_employees,
     gen_employee_records,
     gen_random_indices,
+    import_employees_from_csv,
     insert_into_mysql,
     read_jobs,
     read_lines,
+    update_employee,
 )
 
 
@@ -37,11 +43,13 @@ class EmployeeGeneratorGUI:
         self.pass_var = tk.StringVar()
         self.db_var = tk.StringVar()
         self.db_entries: list[ttk.Entry] = []
+        self.emp_vars: list[tk.StringVar] = []
         self.employees: list[dict] = []
         self.status_var = tk.StringVar(value="Ready.")
 
         self._build_form()
         self._build_table()
+        self._build_db_controls()
         self._build_status_bar()
 
     def _build_form(self) -> None:
@@ -63,29 +71,27 @@ class EmployeeGeneratorGUI:
         ttk.Entry(frm, textvariable=self.count_var, width=10).grid(row=2, column=1, sticky="w", padx=5)
 
         # Insert checkbox
-        ttk.Checkbutton(frm, text="Insert into MySQL", variable=self.insert_var, command=self._toggle_db_fields).grid(
-            row=3, column=0, sticky="w"
-        )
+        ttk.Checkbutton(frm, text="Insert into MySQL", variable=self.insert_var).grid(row=3, column=0, sticky="w")
 
         # DB fields
         ttk.Label(frm, text="Host").grid(row=4, column=0, sticky="w")
-        host_entry = ttk.Entry(frm, textvariable=self.host_var, width=20, state="disabled")
+        host_entry = ttk.Entry(frm, textvariable=self.host_var, width=20)
         host_entry.grid(row=4, column=1, sticky="w", padx=5)
 
         ttk.Label(frm, text="Port").grid(row=4, column=2, sticky="e")
-        port_entry = ttk.Entry(frm, textvariable=self.port_var, width=8, state="disabled")
+        port_entry = ttk.Entry(frm, textvariable=self.port_var, width=8)
         port_entry.grid(row=4, column=3, sticky="w")
 
         ttk.Label(frm, text="User").grid(row=5, column=0, sticky="w")
-        user_entry = ttk.Entry(frm, textvariable=self.user_var, width=20, state="disabled")
+        user_entry = ttk.Entry(frm, textvariable=self.user_var, width=20)
         user_entry.grid(row=5, column=1, sticky="w", padx=5)
 
         ttk.Label(frm, text="Password").grid(row=5, column=2, sticky="e")
-        pass_entry = ttk.Entry(frm, textvariable=self.pass_var, width=20, show="*", state="disabled")
+        pass_entry = ttk.Entry(frm, textvariable=self.pass_var, width=20, show="*")
         pass_entry.grid(row=5, column=3, sticky="w")
 
         ttk.Label(frm, text="Database").grid(row=6, column=0, sticky="w")
-        db_entry = ttk.Entry(frm, textvariable=self.db_var, width=20, state="disabled")
+        db_entry = ttk.Entry(frm, textvariable=self.db_var, width=20)
         db_entry.grid(row=6, column=1, sticky="w", padx=5)
 
         self.db_entries = [host_entry, port_entry, user_entry, pass_entry, db_entry]
@@ -113,15 +119,40 @@ class EmployeeGeneratorGUI:
         hsb.grid(row=1, column=0, sticky="ew")
         container.columnconfigure(0, weight=1)
         container.rowconfigure(0, weight=1)
+        self.tree.bind("<<TreeviewSelect>>", self._on_select_row)
+
+    def _build_db_controls(self) -> None:
+        frm = ttk.LabelFrame(self.root, text="Database CRUD", padding=10)
+        frm.pack(fill="x", padx=10, pady=(0, 10))
+
+        labels = ["ID", "Name", "Department", "Position", "Salary", "Join Date (YYYY-MM-DD)"]
+        vars_ = [
+            tk.StringVar(),
+            tk.StringVar(),
+            tk.StringVar(),
+            tk.StringVar(),
+            tk.StringVar(),
+            tk.StringVar(),
+        ]
+        self.emp_vars = vars_
+
+        for i, (label, var) in enumerate(zip(labels, vars_)):
+            ttk.Label(frm, text=label).grid(row=i // 3, column=(i % 3) * 2, sticky="e", padx=5, pady=2)
+            ttk.Entry(frm, textvariable=var, width=25).grid(row=i // 3, column=(i % 3) * 2 + 1, padx=5, pady=2)
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=2, column=0, columnspan=6, pady=5, sticky="w")
+
+        ttk.Button(btns, text="Load from DB", command=self._load_from_db).grid(row=0, column=0, padx=5)
+        ttk.Button(btns, text="Add", command=self._add_employee).grid(row=0, column=1, padx=5)
+        ttk.Button(btns, text="Update", command=self._update_employee).grid(row=0, column=2, padx=5)
+        ttk.Button(btns, text="Delete", command=self._delete_employee).grid(row=0, column=3, padx=5)
+        ttk.Button(btns, text="Import CSV", command=self._import_csv).grid(row=0, column=4, padx=5)
+        ttk.Button(btns, text="Export CSV", command=self._export_csv).grid(row=0, column=5, padx=5)
 
     def _build_status_bar(self) -> None:
         self.status_label = ttk.Label(self.root, textvariable=self.status_var, anchor="w", padding=5)
         self.status_label.pack(fill="x", side="bottom")
-
-    def _toggle_db_fields(self) -> None:
-        state = "normal" if self.insert_var.get() else "disabled"
-        for entry in self.db_entries:
-            entry.configure(state=state)
 
     def _choose_jobs(self) -> None:
         path = filedialog.askopenfilename(
@@ -153,13 +184,7 @@ class EmployeeGeneratorGUI:
             self._set_status(f"Generated {len(employees)} employees.")
 
             if self.insert_var.get():
-                cfg = {
-                    "host": self.host_var.get() or "localhost",
-                    "port": int(self.port_var.get() or 3306),
-                    "user": self.user_var.get(),
-                    "password": self.pass_var.get(),
-                    "database": self.db_var.get(),
-                }
+                cfg = self._get_db_cfg()
                 missing = [k for k, v in cfg.items() if k not in {"port", "host"} and not v]
                 if missing:
                     raise ValueError(f"Missing database fields: {', '.join(missing)}")
@@ -171,12 +196,23 @@ class EmployeeGeneratorGUI:
             messagebox.showerror("Error", str(exc))
 
     def _render_table(self, employees: List[dict]) -> None:
+        self.employees = employees
         for row in self.tree.get_children():
             self.tree.delete(row)
         for emp in employees:
             self.tree.insert(
                 "", "end", values=(emp["id"], emp["name"], emp["dept"], emp["position"], emp["salary"], emp["join_date"])
             )
+
+    def _on_select_row(self, event: tk.Event) -> None:  # type: ignore[override]
+        selection = self.tree.selection()
+        if not selection:
+            return
+        values = self.tree.item(selection[0], "values")
+        if not values:
+            return
+        for var, val in zip(self.emp_vars, values):
+            var.set(val)
 
     def _validate_inputs(self) -> tuple[list[str], list[tuple[str, str]], int]:
         names_path = Path(self.names_path.get()).expanduser()
@@ -221,6 +257,119 @@ class EmployeeGeneratorGUI:
             writer.writerows(self.employees)
         messagebox.showinfo("Saved", f"Saved {len(self.employees)} records to {path}.")
         self._set_status(f"Saved {len(self.employees)} records to CSV.")
+
+    def _get_db_cfg(self) -> dict:
+        return {
+            "host": self.host_var.get() or "localhost",
+            "port": int(self.port_var.get() or 3306),
+            "user": self.user_var.get(),
+            "password": self.pass_var.get(),
+            "database": self.db_var.get(),
+        }
+
+    def _require_db_cfg(self) -> dict:
+        cfg = self._get_db_cfg()
+        missing = [k for k, v in cfg.items() if k not in {"port", "host"} and not v]
+        if missing:
+            raise ValueError(f"Missing database fields: {', '.join(missing)}")
+        return cfg
+
+    def _validate_employee_fields(self) -> dict:
+        id_, name, dept, position, salary, join_date = [var.get().strip() for var in self.emp_vars]
+        if not all([id_, name, dept, position, salary, join_date]):
+            raise ValueError("All employee fields are required for database operations.")
+        try:
+            salary_val = float(salary)
+        except ValueError as exc:
+            raise ValueError("Salary must be a number.") from exc
+        return {
+            "id": id_,
+            "name": name,
+            "dept": dept,
+            "position": position,
+            "salary": salary_val,
+            "join_date": join_date,
+        }
+
+    def _load_from_db(self) -> None:
+        try:
+            cfg = self._require_db_cfg()
+            employees = fetch_employees(**cfg)
+            self.employees = employees
+            self._render_table(employees)
+            self._set_status(f"Loaded {len(employees)} employees from database.")
+        except Exception as exc:
+            self._set_status(str(exc), is_error=True)
+            messagebox.showerror("Error", str(exc))
+
+    def _add_employee(self) -> None:
+        try:
+            cfg = self._require_db_cfg()
+            record = self._validate_employee_fields()
+            create_employee(record, **cfg)
+            self._load_from_db()
+            messagebox.showinfo("Success", "Employee added.")
+        except Exception as exc:
+            self._set_status(str(exc), is_error=True)
+            messagebox.showerror("Error", str(exc))
+
+    def _update_employee(self) -> None:
+        try:
+            cfg = self._require_db_cfg()
+            record = self._validate_employee_fields()
+            update_employee(record, **cfg)
+            self._load_from_db()
+            messagebox.showinfo("Success", "Employee updated.")
+        except Exception as exc:
+            self._set_status(str(exc), is_error=True)
+            messagebox.showerror("Error", str(exc))
+
+    def _delete_employee(self) -> None:
+        try:
+            cfg = self._require_db_cfg()
+            emp_id = self.emp_vars[0].get().strip()
+            if not emp_id:
+                raise ValueError("Employee ID is required for deletion.")
+            delete_employee(emp_id, **cfg)
+            self._load_from_db()
+            messagebox.showinfo("Success", "Employee deleted.")
+        except Exception as exc:
+            self._set_status(str(exc), is_error=True)
+            messagebox.showerror("Error", str(exc))
+
+    def _import_csv(self) -> None:
+        try:
+            cfg = self._require_db_cfg()
+            path = filedialog.askopenfilename(
+                title="Import employees from CSV",
+                initialdir=self.base_dir,
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            )
+            if not path:
+                return
+            imported = import_employees_from_csv(Path(path), **cfg)
+            self._load_from_db()
+            messagebox.showinfo("Success", f"Imported {len(imported)} employees from CSV.")
+            self._set_status(f"Imported {len(imported)} employees from {Path(path).name}.")
+        except Exception as exc:
+            self._set_status(str(exc), is_error=True)
+            messagebox.showerror("Error", str(exc))
+
+    def _export_csv(self) -> None:
+        if not self.employees:
+            messagebox.showinfo("No data", "Load or generate employees before exporting.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Export employees to CSV",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            initialdir=self.base_dir,
+        )
+        if not path:
+            return
+        written = export_employees_to_csv(self.employees, Path(path))
+        messagebox.showinfo("Saved", f"Exported {written} records to {path}.")
+        self._set_status(f"Exported {written} records to CSV.")
 
     def _set_status(self, text: str, *, is_error: bool = False) -> None:
         self.status_var.set(text)
