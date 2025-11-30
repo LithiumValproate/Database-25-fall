@@ -62,12 +62,12 @@ def gen_employee_records(names: list[str], jobs: list[tuple[str, str]]) -> list[
         dept, position = random.choice(jobs)
         records.append(
             {
-                "id": ids[i],
-                "name": name,
-                "dept": dept,
-                "position": position,
-                "salary": salaries[i],
-                "join_date": gen_random_date(join_start, today).isoformat(),
+                "id":ids[i],
+                "name":name,
+                "dept":dept,
+                "position":position,
+                "salary":salaries[i],
+                "join_date":gen_random_date(join_start, today).isoformat(),
             }
         )
     return records
@@ -94,12 +94,13 @@ def mysql_connection(*, host: str, port: int, user: str, password: str, database
         connection.close()
 
 
-def insert_into_mysql(records: Iterable[dict], *, host: str, port: int, user: str, password: str, database: str) -> None:
+def insert_into_mysql(records: Iterable[dict], *, host: str, port: int, user: str, password: str,
+                      database: str) -> None:
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
         with connection.cursor() as cursor:
             sql = (
-                "INSERT INTO Employee (EmployeeId, EmployeeName, Department, Position, BasicSalary, JoinDate) "
-                "VALUES (%s, %s, %s, %s, %s, %s)"
+                "insert into Employee (Employeeid, Employeename, Department, Position, Basicsalary, Joindate) "
+                "values (%s, %s, %s, %s, %s, %s)"
             )
             payload = [
                 (
@@ -120,9 +121,9 @@ def fetch_employees(*, host: str, port: int, user: str, password: str, database:
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT EmployeeId AS id, EmployeeName AS name, Department AS dept, "
-                "Position AS position, BasicSalary AS salary, JoinDate AS join_date "
-                "FROM Employee ORDER BY EmployeeId"
+                "select Employeeid as Id, Employeename as Name, Department as Dept, "
+                "Position as Position, Basicsalary as Salary, Joindate as Join_Date "
+                "from Employee order by Employeeid"
             )
             rows = cursor.fetchall()
     return [dict(row) for row in rows]
@@ -132,8 +133,8 @@ def add_employee(record: dict, *, host: str, port: int, user: str, password: str
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
-                "INSERT INTO Employee (EmployeeId, EmployeeName, Department, Position, BasicSalary, JoinDate) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
+                "insert into Employee (Employeeid, Employeename, Department, Position, Basicsalary, Joindate) "
+                "values (%s, %s, %s, %s, %s, %s)",
                 (
                     record["id"],
                     record["name"],
@@ -150,8 +151,8 @@ def update_employee(record: dict, *, host: str, port: int, user: str, password: 
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
-                "UPDATE Employee SET EmployeeName=%s, Department=%s, Position=%s, BasicSalary=%s, JoinDate=%s "
-                "WHERE EmployeeId=%s",
+                "update Employee set Employeename=%s, Department=%s, Position=%s, Basicsalary=%s, Joindate=%s "
+                "where Employeeid=%s",
                 (
                     record["name"],
                     record["dept"],
@@ -167,7 +168,7 @@ def update_employee(record: dict, *, host: str, port: int, user: str, password: 
 def delete_employee(employee_id: str, *, host: str, port: int, user: str, password: str, database: str) -> None:
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
         with connection.cursor() as cursor:
-            cursor.execute("DELETE FROM Employee WHERE EmployeeId=%s", (employee_id,))
+            cursor.execute("delete from Employee where Employeeid=%s", (employee_id,))
         connection.commit()
 
 
@@ -180,12 +181,12 @@ def import_employees_from_csv(path: Path, *, host: str, port: int, user: str, pa
             raise ValueError(f"Missing required columns: {', '.join(sorted(missing_cols))}")
         rows = [
             {
-                "id": row["id"].strip(),
-                "name": row["name"].strip(),
-                "dept": row["dept"].strip(),
-                "position": row["position"].strip(),
-                "salary": float(row["salary"]),
-                "join_date": datetime.fromisoformat(row["join_date"]).date().isoformat(),
+                "id":row["id"].strip(),
+                "name":row["name"].strip(),
+                "dept":row["dept"].strip(),
+                "position":row["position"].strip(),
+                "salary":float(row["salary"]),
+                "join_date":datetime.fromisoformat(row["join_date"]).date().isoformat(),
             }
             for row in reader
             if any(row.values())
@@ -197,8 +198,8 @@ def import_employees_from_csv(path: Path, *, host: str, port: int, user: str, pa
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
         with connection.cursor() as cursor:
             cursor.executemany(
-                "INSERT INTO Employee (EmployeeId, EmployeeName, Department, Position, BasicSalary, JoinDate) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
+                "insert into Employee (Employeeid, Employeename, Department, Position, Basicsalary, Joindate) "
+                "values (%s, %s, %s, %s, %s, %s)",
                 [
                     (r["id"], r["name"], r["dept"], r["position"], r["salary"], r["join_date"])
                     for r in rows

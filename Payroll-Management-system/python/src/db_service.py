@@ -45,15 +45,15 @@ def fetch_table_rows(table: str, *, host: str, port: int, user: str, password: s
 
 
 def fetch_record_by_column(
-    table: str,
-    column: str,
-    value: Any,
-    *,
-    host: str,
-    port: int,
-    user: str,
-    password: str,
-    database: str,
+        table: str,
+        column: str,
+        value: Any,
+        *,
+        host: str,
+        port: int,
+        user: str,
+        password: str,
+        database: str,
 ) -> dict | None:
     """Fetch a single record by matching a specific column value."""
 
@@ -64,7 +64,8 @@ def fetch_record_by_column(
             return cursor.fetchone()
 
 
-def insert_row(table: str, data: dict[str, Any], *, host: str, port: int, user: str, password: str, database: str) -> None:
+def insert_row(table: str, data: dict[str, Any], *, host: str, port: int, user: str, password: str,
+               database: str) -> None:
     columns = ", ".join(f"`{col}`" for col in data)
     placeholders = ", ".join(["%s"] * len(data))
     values = list(data.values())
@@ -76,16 +77,16 @@ def insert_row(table: str, data: dict[str, Any], *, host: str, port: int, user: 
 
 
 def update_row(
-    table: str,
-    data: dict[str, Any],
-    key_column: str,
-    key_value: Any,
-    *,
-    host: str,
-    port: int,
-    user: str,
-    password: str,
-    database: str,
+        table: str,
+        data: dict[str, Any],
+        key_column: str,
+        key_value: Any,
+        *,
+        host: str,
+        port: int,
+        user: str,
+        password: str,
+        database: str,
 ) -> None:
     setters = ", ".join(f"`{col}`=%s" for col in data)
     values = list(data.values()) + [key_value]
@@ -97,15 +98,15 @@ def update_row(
 
 
 def delete_row(
-    table: str,
-    key_column: str,
-    key_value: Any,
-    *,
-    host: str,
-    port: int,
-    user: str,
-    password: str,
-    database: str,
+        table: str,
+        key_column: str,
+        key_value: Any,
+        *,
+        host: str,
+        port: int,
+        user: str,
+        password: str,
+        database: str,
 ) -> None:
     sql = f"DELETE FROM `{table}` WHERE `{key_column}`=%s"
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
@@ -117,35 +118,29 @@ def delete_row(
 def normalize_records(rows: Iterable[dict]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for row in rows:
-        normalized.append({k: row[k] for k in row})
+        normalized.append({k:row[k] for k in row})
     return normalized
 
 
 def fetch_table_constraints(
-    table: str, *, host: str, port: int, user: str, password: str, database: str
+        table: str, *, host: str, port: int, user: str, password: str, database: str
 ) -> list[dict[str, Any]]:
     """
     获取指定表的约束信息，包括主键、唯一键、外键与检查约束。
     """
     sql = """
-    SELECT
-        tc.CONSTRAINT_NAME AS constraint_name,
-        tc.CONSTRAINT_TYPE AS constraint_type,
-        kcu.COLUMN_NAME AS column_name,
-        kcu.REFERENCED_TABLE_NAME AS referenced_table,
-        kcu.REFERENCED_COLUMN_NAME AS referenced_column,
-        cc.CHECK_CLAUSE AS check_clause
-    FROM information_schema.TABLE_CONSTRAINTS tc
-    LEFT JOIN information_schema.KEY_COLUMN_USAGE kcu
-        ON tc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
-        AND tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
-        AND tc.TABLE_NAME = kcu.TABLE_NAME
-    LEFT JOIN information_schema.CHECK_CONSTRAINTS cc
-        ON tc.CONSTRAINT_SCHEMA = cc.CONSTRAINT_SCHEMA
-        AND tc.CONSTRAINT_NAME = cc.CONSTRAINT_NAME
-    WHERE tc.TABLE_SCHEMA = %s AND tc.TABLE_NAME = %s
-    ORDER BY tc.CONSTRAINT_TYPE, tc.CONSTRAINT_NAME, kcu.ORDINAL_POSITION;
-    """
+          select Tc.Constraint_Name as Constraint_Name, Tc.Constraint_Type as Constraint_Type,
+                 Kcu.Column_Name as Column_Name, Kcu.Referenced_Table_Name as Referenced_Table,
+                 Kcu.Referenced_Column_Name as Referenced_Column, Cc.Check_Clause as Check_Clause
+          from Information_Schema.Table_Constraints Tc
+                   left join Information_Schema.Key_Column_Usage Kcu on Tc.Constraint_Schema = Kcu.Constraint_Schema and
+                                                                        Tc.Constraint_Name = Kcu.Constraint_Name and
+                                                                        Tc.Table_Name = Kcu.Table_Name
+                   left join Information_Schema.Check_Constraints Cc
+                             on Tc.Constraint_Schema = Cc.Constraint_Schema and Tc.Constraint_Name = Cc.Constraint_Name
+          where Tc.Table_Schema = %s and Tc.Table_Name = %s
+          order by Tc.Constraint_Type, Tc.Constraint_Name, Kcu.Ordinal_Position; \
+          """
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
         with connection.cursor() as cursor:
             cursor.execute(sql, (database, table))
