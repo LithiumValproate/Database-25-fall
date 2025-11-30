@@ -10,7 +10,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
-from db_service import delete_row, fetch_table_rows, fetch_table_schema, insert_row, list_tables, normalize_records, update_row
+from db_service import (
+    delete_row,
+    fetch_column_attributes,
+    fetch_table_constraints,
+    fetch_table_rows,
+    fetch_table_schema,
+    insert_row,
+    list_tables,
+    normalize_records,
+    update_row,
+)
 from employee_service import (
     add_employee,
     delete_employee,
@@ -63,6 +73,8 @@ class DataManagerGUI:
         self.table_var = tk.StringVar()
         self.table_columns: list[str] = []
         self.table_schema: list[dict] = []
+        self.column_attributes: list[dict] = []
+        self.table_constraints: list[dict] = []
         self.field_vars: dict[str, tk.StringVar] = {}
         self.key_column: str | None = None
         self.sort_state: dict[str, bool] = {}
@@ -198,6 +210,47 @@ class DataManagerGUI:
         ttk.Button(db_btns, text="新增记录", command=self._create_record).grid(row=0, column=0, padx=5)
         ttk.Button(db_btns, text="更新记录", command=self._update_record).grid(row=0, column=1, padx=5)
         ttk.Button(db_btns, text="删除记录", command=self._delete_record).grid(row=0, column=2, padx=5)
+
+        schema_frame = ttk.Frame(self.form_frame)
+        schema_frame.pack(fill="both", expand=True, pady=5)
+
+        col_frame = ttk.LabelFrame(schema_frame, text="列属性", padding=5)
+        col_frame.pack(side="left", fill="both", expand=True, padx=(0, 5))
+        self.column_tree = ttk.Treeview(
+            col_frame,
+            columns=("name", "type", "nullable", "default", "key", "extra"),
+            show="headings",
+            height=6,
+        )
+        for col, text, width in [
+            ("name", "列名", 120),
+            ("type", "类型", 150),
+            ("nullable", "可空", 60),
+            ("default", "默认值", 100),
+            ("key", "键", 60),
+            ("extra", "额外", 100),
+        ]:
+            self.column_tree.heading(col, text=text)
+            self.column_tree.column(col, width=width, anchor="center")
+        self.column_tree.pack(fill="both", expand=True)
+
+        cons_frame = ttk.LabelFrame(schema_frame, text="约束", padding=5)
+        cons_frame.pack(side="left", fill="both", expand=True)
+        self.constraint_tree = ttk.Treeview(
+            cons_frame,
+            columns=("name", "type", "columns", "details"),
+            show="headings",
+            height=6,
+        )
+        for col, text, width in [
+            ("name", "约束名", 140),
+            ("type", "类型", 100),
+            ("columns", "列", 180),
+            ("details", "详情", 200),
+        ]:
+            self.constraint_tree.heading(col, text=text)
+            self.constraint_tree.column(col, width=width, anchor="center")
+        self.constraint_tree.pack(fill="both", expand=True)
 
     def _build_status_bar(self) -> None:
         self.status_label = ttk.Label(self.root, textvariable=self.status_var, anchor="w", padding=5)
@@ -462,12 +515,16 @@ class DataManagerGUI:
             self.table_schema = fetch_table_schema(table, **cfg)
             self.table_columns = [c["Field"] for c in self.table_schema]
             self.key_column = next((c["Field"] for c in self.table_schema if c.get("Key") == "PRI"), self.table_columns[0])
+            self.column_attributes = fetch_column_attributes(table, **cfg)
+            self.table_constraints = fetch_table_constraints(table, **cfg)
             rows = normalize_records(fetch_table_rows(table, **cfg))
             self.db_records = rows
             self.filtered_records = rows
             self.table_mode = "db"
             self._render_table(rows)
             self._build_dynamic_fields()
+            self._render_column_attributes()
+            self._render_constraints()
             self._set_status(f"已加载表 {table} 的 {len(rows)} 条记录。")
         except Exception as exc:
             self._set_status(str(exc), is_error=True)
@@ -483,6 +540,40 @@ class DataManagerGUI:
             ttk.Label(self.dynamic_fields, text=col).grid(row=idx // 4, column=(idx % 4) * 2, sticky="e", padx=5, pady=2)
             ttk.Entry(self.dynamic_fields, textvariable=var, width=20).grid(
                 row=idx // 4, column=(idx % 4) * 2 + 1, sticky="w", padx=5, pady=2
+            )
+
+    def _render_column_attributes(self) -> None:
+        for row in self.column_tree.get_children():
+            self.column_tree.delete(row)
+        for col in self.column_attributes:
+            self.column_tree.insert(
+                "",
+                "end",
+                values=
+                (
+                    col.get("column_name"),
+                    col.get("column_type"),
+                    col.get("is_nullable"),
+                    col.get("column_default"),
+                    col.get("column_key"),
+                    col.get("extra"),
+                ),
+            )
+
+    def _render_constraints(self) -> None:
+        for row in self.constraint_tree.get_children():
+            self.constraint_tree.delete(row)
+        for cons in self.table_constraints:
+            columns = ", ".join(cons.get("columns") or [])
+            self.constraint_tree.insert(
+                "",
+                "end",
+                values=(
+                    cons.get("constraint_name"),
+                    cons.get("constraint_type"),
+                    columns,
+                    cons.get("details"),
+                ),
             )
 
     def _collect_dynamic_data(self) -> dict:
