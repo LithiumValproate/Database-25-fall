@@ -1,0 +1,14 @@
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('ABS001', '短事假', 0, '按请假时长扣除当日基本工资的相应比例');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('ABS002', '长事假', 0, '按公司长事假制度执行 按请假天数扣除当日基本工资的100%');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('BRL001', '生育假', 0, '生育假期间按国家及公司产假制度发放 按基本工资的80%计发');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('FEL001', '家庭假', 0, '家庭事件假按公司制度全额计发 不扣薪');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('HOT001', '常规节假日加班', 1, '节假日加班按基本时薪的3倍支付');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('HOT002', '节假日加班', 1, '节假日加班按基本时薪的3倍支付 不得以调休代替');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('ILL001', '小病假', 0, '小病假按带薪比例发放 按基本工资的70%计发 不足部分扣除');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('ILL002', '大病假', 0, '大病假按长期病假制度执行 按基本工资的50%计发 不足部分扣除');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('LHT001', '调休', 0, '调休按工时抵扣 不产生工资扣减 当调休余额不足时按日薪扣除差额');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('LHT002', '年假', 0, '年假按工龄及公司制度正常计发 超额使用部分按日薪扣除');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('ROT001', '常规休息日加班', 1, '休息日加班按基本时薪的2倍支付 如安排调休则不另行支付');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('ROT002', '休息日加班', 1, '休息日加班按基本时薪的2倍支付 如调休抵扣则按调休优先');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('WOT001', '常规工作日加班', 1, '工作日加班按基本时薪的1.5倍支付');
+insert into payroll_management.Payroll_Item (ItemId, ItemName, ItemType, ItemRule) values ('WOT002', '工作日加班', 1, '延时工作日加班按基本时薪的1.25倍支付');

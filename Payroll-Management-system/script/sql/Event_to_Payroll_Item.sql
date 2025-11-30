@@ -1,0 +1,13 @@
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (1, 'ABS001', 'AB01', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (2, 'ILL001', 'AB02', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (3, 'BRL001', 'BR01', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (4, 'BRL001', 'BR02', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (5, 'FEL001', 'FM01', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (6, 'FEL001', 'FM02', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (7, 'LHT001', 'LT02', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (8, 'LHT002', 'LT01', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (9, 'HOT001', 'OH01', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (10, 'ROT001', 'OR02', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (11, 'ROT002', 'OR01', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (12, 'WOT001', 'OW02', 1);
+insert into payroll_management.Event_to_Payroll_Item (MapId, ItemId, EventId, IsActive) values (13, 'WOT002', 'OW01', 1);

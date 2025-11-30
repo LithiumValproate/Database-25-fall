@@ -1,9 +1,9 @@
 -- v2 --
 
-create schema if not exists payroll_management;
+drop schema if exists payroll_management;
+create schema payroll_management;
 use payroll_management;
 
-drop table if exists Employee;
 create table Employee
 (
     EmployeeId     char(8)        not null comment '员工编号',
@@ -17,22 +17,20 @@ create table Employee
     primary key (EmployeeId)
 ) comment '员工';
 
-drop table if exists Event;
 create table Event
 (
-    EventId     char(6)     not null comment '事件类型编号',
+    EventId     char(4)     not null comment '事件类型编号',
     EventName   varchar(20) not null unique comment '事件类型',
     EventType   bool        not null comment '事件类别，0表示缺勤，1表示加班',
     Description varchar(200) comment '描述',
     primary key (EventId)
 ) comment '工作事件类型';
 
-drop table if exists Absence_Record;
 create table Absence_Record
 (
     AbsenceId     char(10)     not null comment '记录编号',
     EmployeeId    char(8)      not null comment '员工编号',
-    AbsenceType   char(6)      not null comment '缺勤类型编号',
+    AbsenceType   char(4)      not null comment '缺勤类型编号',
     StartDateTime datetime     not null comment '开始时间',
     EndDateTime   datetime     not null comment '结束时间',
     Duration      int unsigned not null comment '缺勤时长（分钟）',
@@ -42,12 +40,11 @@ create table Absence_Record
     foreign key (AbsenceType) references Event (EventId)
 ) comment '缺勤记录';
 
-drop table if exists Overtime_Record;
 create table Overtime_Record
 (
     OvertimeId    char(10)     not null comment '记录编号',
     EmployeeId    char(8)      not null comment '员工编号',
-    OvertimeType  char(6)      not null comment '加班类型编号',
+    OvertimeType  char(4)      not null comment '加班类型编号',
     StartDateTime datetime     not null comment '加班开始时间',
     EndDateTime   datetime     not null comment '加班结束时间',
     Duration      int unsigned not null comment '加班时长（分钟）',
@@ -57,22 +54,20 @@ create table Overtime_Record
     foreign key (OvertimeType) references Event (EventId)
 ) comment '加班记录';
 
-drop table if exists Payroll_Item;
 create table Payroll_Item
 (
-    ItemId   char(4)     not null comment '项目编号',
+    ItemId   char(6)     not null comment '项目编号',
     ItemName varchar(20) not null unique comment '项目名称',
     ItemType bool        not null comment '项目类型，0表示扣除项目，1表示奖励项目',
     ItemRule text        not null comment '计算规则描述',
     primary key (ItemId)
 ) comment '工资奖励/扣除项目';
 
-drop table if exists Bonus_Record;
 create table Bonus_Record
 (
     BonusId     char(14)      not null comment '记录编号',
     EmployeeId  char(8)       not null comment '员工编号',
-    BonusType   char(4)       not null comment '奖金类型',
+    BonusType   char(6)       not null comment '奖金类型',
     BonusAmount decimal(8, 2) not null comment '金额',
     BonusDate   date comment '发放日期',
     IsSettled   bool          not null default 0 comment '是否已发放',
@@ -81,12 +76,11 @@ create table Bonus_Record
     foreign key (BonusType) references Payroll_Item (ItemId)
 ) comment '奖金记录';
 
-drop table if exists Deduction_Record;
 create table Deduction_Record
 (
     DeductionId     char(14)      not null comment '扣款记录编号',
     EmployeeId      char(8)       not null comment '员工编号',
-    DeductionType   char(4)       not null comment '扣款类型',
+    DeductionType   char(6)       not null comment '扣款类型',
     DeductionAmount decimal(8, 2) not null comment '扣款金额',
     DeductionDate   date comment '扣款日期',
     IsSettled       bool          not null default 0 comment '是否已扣款',
@@ -95,12 +89,11 @@ create table Deduction_Record
     foreign key (DeductionType) references Payroll_Item (ItemId)
 ) comment '扣款记录';
 
-drop table if exists Event_to_Payroll_Item;
 create table Event_to_Payroll_Item
 (
     MapId    int     not null auto_increment comment '映射编号',
-    ItemId   char(4) not null comment '项目编号',
-    EventId  char(6) not null comment '事件编号',
+    ItemId   char(6) not null comment '项目编号',
+    EventId  char(4) not null comment '事件编号',
     IsActive bool    not null comment '是否启用',
     primary key (MapId),
     unique (ItemId, EventId),
@@ -108,7 +101,6 @@ create table Event_to_Payroll_Item
     foreign key (EventId) references Event (EventId)
 ) comment '工资项目/工作事件映射';
 
-drop table if exists Payment_Method;
 create table Payment_Method
 (
     PaymentMethodId   char(3)     not null comment '支付方式编号',
@@ -118,7 +110,6 @@ create table Payment_Method
     primary key (PaymentMethodId)
 ) comment '支付方式';
 
-drop table if exists Payroll_Record;
 create table Payroll_Record
 (
     PayrollId      char(14)       not null comment '工资单编号',
@@ -134,20 +125,6 @@ create table Payroll_Record
     foreign key (PaymentMethod) references Payment_Method (PaymentMethodId)
 ) comment '工资单记录';
 
-drop procedure if exists checkDateTimeRange;
-drop function if exists calcDuration;
-drop trigger if exists trg_Absence_type;
-drop trigger if exists trg_Overtime_type;
-drop trigger if exists trg_Absence_calc;
-drop trigger if exists trg_Overtime_calc;
-drop trigger if exists trg_Bonus_type;
-drop trigger if exists trg_Deduction_type;
-drop trigger if exists trg_Bonus_default_date;
-drop trigger if exists trg_Deduction_default_date;
-drop trigger if exists trg_Absence_type_update;
-drop trigger if exists trg_Absence_calc_update;
-drop trigger if exists trg_Overtime_type_update;
-drop trigger if exists trg_Overtime_calc_update;
 
 delimiter $$
 create procedure checkDateTimeRange(

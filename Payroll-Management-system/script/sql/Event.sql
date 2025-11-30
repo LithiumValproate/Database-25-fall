@@ -1,0 +1,13 @@
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('AB01', '事假', 0, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('AB02', '病假', 0, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('BR01', '产假', 0, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('BR02', '陪产假', 0, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('FM01', '婚假', 0, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('FM02', '丧假', 0, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('LT01', '年假', 0, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('LT02', '调休', 0, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('OH01', '节假日加班', 1, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('OR01', '休息日加班', 1, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('OR02', '节假日轮转加班', 1, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('OW01', '工作日加班', 1, null);
+insert into payroll_management.Event (EventId, EventName, EventType, Description) values ('OW02', '工作日延时加班', 1, null);
