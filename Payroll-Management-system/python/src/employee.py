@@ -99,7 +99,7 @@ def gen_employee_records(names: list[str], jobs: list[tuple[str, str]]) -> list[
     join_start = date(2012, 1, 1)
     today = date.today()
     ids = gen_unique_ids(len(names))
-    salaries = [float(f'{random.randrange(3000, 15001, 100):.2f}') for _ in names]
+    salaries = [float(f'{random.randrange(3000, 100001, 100):.2f}') for _ in names]
 
     records = []
     for i, name in enumerate(names):
