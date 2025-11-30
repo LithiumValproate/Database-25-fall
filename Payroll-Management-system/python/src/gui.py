@@ -514,7 +514,10 @@ class DataManagerGUI:
             cfg = self._get_db_config()
             self.table_schema = fetch_table_schema(table, **cfg)
             self.table_columns = [c["Field"] for c in self.table_schema]
-            self.key_column = next((c["Field"] for c in self.table_schema if c.get("Key") == "PRI"), self.table_columns[0])
+            self.key_column = None
+            if self.table_columns:
+                self.key_column = next((c["Field"] for c in self.table_schema if c.get("Key") == "PRI"), None)
+                self.key_column = self.key_column or self.table_columns[0]
             self.column_attributes = fetch_column_attributes(table, **cfg)
             self.table_constraints = fetch_table_constraints(table, **cfg)
             rows = normalize_records(fetch_table_rows(table, **cfg))
