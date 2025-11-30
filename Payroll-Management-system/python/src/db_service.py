@@ -99,3 +99,34 @@ def normalize_records(rows: Iterable[dict]) -> list[dict[str, Any]]:
     for row in rows:
         normalized.append({k: row[k] for k in row})
     return normalized
+
+
+def fetch_table_constraints(
+    table: str, *, host: str, port: int, user: str, password: str, database: str
+) -> list[dict[str, Any]]:
+    """
+    获取指定表的约束信息，包括主键、唯一键、外键与检查约束。
+    """
+    sql = """
+    SELECT
+        tc.CONSTRAINT_NAME AS constraint_name,
+        tc.CONSTRAINT_TYPE AS constraint_type,
+        kcu.COLUMN_NAME AS column_name,
+        kcu.REFERENCED_TABLE_NAME AS referenced_table,
+        kcu.REFERENCED_COLUMN_NAME AS referenced_column,
+        cc.CHECK_CLAUSE AS check_clause
+    FROM information_schema.TABLE_CONSTRAINTS tc
+    LEFT JOIN information_schema.KEY_COLUMN_USAGE kcu
+        ON tc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
+        AND tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+        AND tc.TABLE_NAME = kcu.TABLE_NAME
+    LEFT JOIN information_schema.CHECK_CONSTRAINTS cc
+        ON tc.CONSTRAINT_SCHEMA = cc.CONSTRAINT_SCHEMA
+        AND tc.CONSTRAINT_NAME = cc.CONSTRAINT_NAME
+    WHERE tc.TABLE_SCHEMA = %s AND tc.TABLE_NAME = %s
+    ORDER BY tc.CONSTRAINT_TYPE, tc.CONSTRAINT_NAME, kcu.ORDINAL_POSITION;
+    """
+    with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(sql, (database, table))
+            return cursor.fetchall()

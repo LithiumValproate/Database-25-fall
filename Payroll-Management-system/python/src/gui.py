@@ -3,14 +3,23 @@ import sys
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import colorchooser, filedialog, messagebox, ttk
 from typing import List
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
-from db_service import delete_row, fetch_table_rows, fetch_table_schema, insert_row, list_tables, normalize_records, update_row
+from db_service import (
+    delete_row,
+    fetch_table_constraints,
+    fetch_table_rows,
+    fetch_table_schema,
+    insert_row,
+    list_tables,
+    normalize_records,
+    update_row,
+)
 from employee_service import (
     add_employee,
     delete_employee,
@@ -143,6 +152,8 @@ class DataManagerGUI:
         ttk.Entry(frm, textvariable=self.search_var, width=30).grid(row=0, column=3, sticky="w", padx=5)
         ttk.Button(frm, text="应用搜索", command=self._apply_search).grid(row=0, column=4, padx=5)
         ttk.Button(frm, text="清除筛选", command=self._clear_filters).grid(row=0, column=5, padx=5)
+        ttk.Button(frm, text="查看属性", command=self._show_table_attributes).grid(row=0, column=6, padx=5)
+        ttk.Button(frm, text="查看约束", command=self._show_table_constraints).grid(row=0, column=7, padx=5)
 
     def _build_table(self) -> None:
         container = ttk.Frame(self.root)
@@ -564,6 +575,86 @@ class DataManagerGUI:
         self._render_table(self.filtered_records)
         self._set_status("已清除筛选。")
 
+    def _show_table_attributes(self) -> None:
+        table = self.table_var.get()
+        if not table:
+            messagebox.showinfo("提示", "请选择表后再查看属性。")
+            return
+        try:
+            cfg = self._get_db_config()
+            schema = fetch_table_schema(table, **cfg)
+            if not schema:
+                messagebox.showinfo("提示", "未找到表结构信息。")
+                return
+            rows = [
+                {
+                    "Field": col.get("Field", ""),
+                    "Type": col.get("Type", ""),
+                    "Null": col.get("Null", ""),
+                    "Key": col.get("Key", ""),
+                    "Default": "" if col.get("Default") is None else col.get("Default"),
+                    "Extra": col.get("Extra", ""),
+                    "Comment": col.get("Comment", ""),
+                }
+                for col in schema
+            ]
+            columns = [
+                ("Field", "字段名"),
+                ("Type", "数据类型"),
+                ("Null", "允许空值"),
+                ("Key", "键类型"),
+                ("Default", "默认值"),
+                ("Extra", "附加"),
+                ("Comment", "注释"),
+            ]
+            self._open_info_dialog(f"{table} 的列属性", columns, rows)
+            self._set_status(f"已展示 {table} 的字段属性。")
+        except Exception as exc:
+            self._set_status(str(exc), is_error=True)
+            messagebox.showerror("数据库错误", str(exc))
+
+    def _show_table_constraints(self) -> None:
+        table = self.table_var.get()
+        if not table:
+            messagebox.showinfo("提示", "请选择表后再查看约束。")
+            return
+        try:
+            cfg = self._get_db_config()
+            constraints = fetch_table_constraints(table, **cfg)
+            if not constraints:
+                messagebox.showinfo("提示", "当前表未定义约束。")
+                self._set_status("未查询到约束。")
+                return
+            rows = []
+            for item in constraints:
+                reference = ""
+                if item.get("referenced_table"):
+                    ref_col = item.get("referenced_column") or ""
+                    reference = (
+                        f"{item['referenced_table']}.{ref_col}" if ref_col else item["referenced_table"]
+                    )
+                rows.append(
+                    {
+                        "constraint_name": item.get("constraint_name", ""),
+                        "constraint_type": item.get("constraint_type", ""),
+                        "column_name": item.get("column_name", "") or "",
+                        "reference": reference,
+                        "check_clause": item.get("check_clause", "") or "",
+                    }
+                )
+            columns = [
+                ("constraint_name", "约束名"),
+                ("constraint_type", "类型"),
+                ("column_name", "列"),
+                ("reference", "引用/目标"),
+                ("check_clause", "检查条件"),
+            ]
+            self._open_info_dialog(f"{table} 的约束", columns, rows)
+            self._set_status(f"已展示 {table} 的约束信息。")
+        except Exception as exc:
+            self._set_status(str(exc), is_error=True)
+            messagebox.showerror("数据库错误", str(exc))
+
     def _on_heading_click(self, column: str) -> None:
         records = self.filtered_records or self._get_active_records()
         if not records:
@@ -607,6 +698,33 @@ class DataManagerGUI:
             var.set("")
         for var in self.field_vars.values():
             var.set("")
+
+    def _open_info_dialog(self, title: str, columns: list[tuple[str, str]], rows: list[dict]) -> None:
+        win = tk.Toplevel(self.root)
+        win.title(title)
+        frame = ttk.Frame(win, padding=10)
+        frame.pack(fill="both", expand=True)
+
+        col_ids = [col_id for col_id, _ in columns]
+        tree = ttk.Treeview(frame, columns=col_ids, show="headings", height=12)
+        for col_id, heading in columns:
+            tree.heading(col_id, text=heading)
+            tree.column(col_id, width=150, anchor="w")
+
+        vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+        hsb = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+
+        for row in rows:
+            tree.insert("", "end", values=[row.get(col_id, "") for col_id in col_ids])
+
+        ttk.Button(frame, text="关闭", command=win.destroy).grid(row=2, column=0, sticky="e", pady=8)
 
     def _get_active_records(self) -> list[dict]:
         return self.db_records if self.table_mode == "db" else self.employees
