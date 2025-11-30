@@ -13,6 +13,7 @@ if str(BASE_DIR) not in sys.path:
 from db_service import (
     delete_row,
     fetch_table_constraints,
+    fetch_record_by_column,
     fetch_table_rows,
     fetch_table_schema,
     insert_row,
@@ -76,6 +77,10 @@ class DataManagerGUI:
         self.key_column: str | None = None
         self.sort_state: dict[str, bool] = {}
         self.search_var = tk.StringVar()
+        self.foreign_keys: dict[str, tuple[str, str]] = {}
+        self.fk_tooltip: tk.Toplevel | None = None
+        self.fk_hover_target: tuple[str, str] | None = None
+        self.fk_cache: dict[tuple[str, str, str], dict] = {}
 
         self._build_generator_form()
         self._build_db_config()
@@ -161,6 +166,9 @@ class DataManagerGUI:
 
         self.tree = ttk.Treeview(container, show="headings")
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+        self.tree.bind("<Double-1>", self._on_tree_double_click)
+        self.tree.bind("<Motion>", self._on_tree_motion)
+        self.tree.bind("<Leave>", lambda _: self._hide_fk_tooltip())
 
         vsb = ttk.Scrollbar(container, orient="vertical", command=self.tree.yview)
         hsb = ttk.Scrollbar(container, orient="horizontal", command=self.tree.xview)
@@ -473,6 +481,7 @@ class DataManagerGUI:
             self.table_schema = fetch_table_schema(table, **cfg)
             self.table_columns = [c["Field"] for c in self.table_schema]
             self.key_column = next((c["Field"] for c in self.table_schema if c.get("Key") == "PRI"), self.table_columns[0])
+            self.foreign_keys = self._extract_foreign_keys(fetch_table_constraints(table, **cfg))
             rows = normalize_records(fetch_table_rows(table, **cfg))
             self.db_records = rows
             self.filtered_records = rows
@@ -483,6 +492,18 @@ class DataManagerGUI:
         except Exception as exc:
             self._set_status(str(exc), is_error=True)
             messagebox.showerror("数据库错误", str(exc))
+
+    def _extract_foreign_keys(self, constraints: list[dict]) -> dict[str, tuple[str, str]]:
+        foreign_keys: dict[str, tuple[str, str]] = {}
+        for item in constraints:
+            if item.get("constraint_type") != "FOREIGN KEY":
+                continue
+            column = item.get("column_name")
+            target_table = item.get("referenced_table")
+            target_column = item.get("referenced_column")
+            if column and target_table and target_column:
+                foreign_keys[column] = (target_table, target_column)
+        return foreign_keys
 
     def _build_dynamic_fields(self) -> None:
         for child in self.dynamic_fields.winfo_children():
@@ -685,6 +706,126 @@ class DataManagerGUI:
                 self.emp_pos_var.set(values[3])
                 self.emp_salary_var.set(values[4])
                 self.emp_join_var.set(values[5])
+
+    def _on_tree_double_click(self, event: tk.Event) -> None:
+        if self.table_mode != "db" or not self.foreign_keys:
+            return
+        row_id = self.tree.identify_row(event.y)
+        col_id = self.tree.identify_column(event.x)
+        if not row_id or not col_id:
+            return
+        try:
+            col_index = int(col_id.replace("#", "")) - 1
+        except ValueError:
+            return
+        columns = list(self.tree["columns"])
+        if col_index < 0 or col_index >= len(columns):
+            return
+        column_name = columns[col_index]
+        if column_name not in self.foreign_keys:
+            return
+        values = self.tree.item(row_id, "values")
+        if col_index >= len(values):
+            return
+        value = values[col_index]
+        if value in (None, ""):
+            return
+        target_table, target_column = self.foreign_keys[column_name]
+        try:
+            self.table_var.set(target_table)
+            self._load_table_data()
+            columns = list(self.tree["columns"])
+            if target_column in columns:
+                target_idx = columns.index(target_column)
+                for item in self.tree.get_children():
+                    vals = self.tree.item(item, "values")
+                    if target_idx < len(vals) and str(vals[target_idx]) == str(value):
+                        self.tree.selection_set(item)
+                        self.tree.focus(item)
+                        self.tree.see(item)
+                        break
+            self._set_status(f"已跳转到 {target_table}，匹配 {target_column}={value}。")
+        except Exception as exc:
+            self._set_status(str(exc), is_error=True)
+            messagebox.showerror("数据库错误", str(exc))
+
+    def _on_tree_motion(self, event: tk.Event) -> None:
+        if self.table_mode != "db" or not self.foreign_keys:
+            self._hide_fk_tooltip()
+            return
+        row_id = self.tree.identify_row(event.y)
+        col_id = self.tree.identify_column(event.x)
+        if not row_id or not col_id:
+            self._hide_fk_tooltip()
+            return
+        try:
+            col_index = int(col_id.replace("#", "")) - 1
+        except ValueError:
+            self._hide_fk_tooltip()
+            return
+        columns = list(self.tree["columns"])
+        if col_index < 0 or col_index >= len(columns):
+            self._hide_fk_tooltip()
+            return
+        column_name = columns[col_index]
+        if column_name not in self.foreign_keys:
+            self._hide_fk_tooltip()
+            return
+        values = self.tree.item(row_id, "values")
+        if col_index >= len(values):
+            self._hide_fk_tooltip()
+            return
+        value = values[col_index]
+        if value in (None, ""):
+            self._hide_fk_tooltip()
+            return
+        target = (row_id, column_name)
+        if self.fk_hover_target == target:
+            return
+        self.fk_hover_target = target
+        ref_table, ref_column = self.foreign_keys[column_name]
+        cache_key = (ref_table, ref_column, str(value))
+        record = self.fk_cache.get(cache_key)
+        if record is None:
+            try:
+                cfg = self._get_db_config()
+                record = fetch_record_by_column(ref_table, ref_column, value, **cfg)
+                self.fk_cache[cache_key] = record or {}
+            except Exception as exc:
+                self._set_status(str(exc), is_error=True)
+                self._hide_fk_tooltip()
+                return
+        if not record:
+            self._hide_fk_tooltip()
+            return
+        self._show_fk_tooltip(event, ref_table, record)
+
+    def _show_fk_tooltip(self, event: tk.Event, table: str, record: dict) -> None:
+        self._hide_fk_tooltip()
+        tip = tk.Toplevel(self.root)
+        tip.wm_overrideredirect(True)
+        x = self.root.winfo_pointerx() + 12
+        y = self.root.winfo_pointery() + 12
+        tip.wm_geometry(f"+{x}+{y}")
+        content = "\n".join(f"{k}: {v}" for k, v in record.items())
+        label = tk.Label(
+            tip,
+            text=f"{table} 记录\n{content}",
+            justify="left",
+            background="#f7f7f7",
+            relief="solid",
+            borderwidth=1,
+            padx=8,
+            pady=6,
+        )
+        label.pack()
+        self.fk_tooltip = tip
+
+    def _hide_fk_tooltip(self) -> None:
+        if self.fk_tooltip and self.fk_tooltip.winfo_exists():
+            self.fk_tooltip.destroy()
+        self.fk_tooltip = None
+        self.fk_hover_target = None
 
     def _clear_form_fields(self) -> None:
         for var in (
