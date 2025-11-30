@@ -44,6 +44,26 @@ def fetch_table_rows(table: str, *, host: str, port: int, user: str, password: s
             return cursor.fetchall()
 
 
+def fetch_record_by_column(
+    table: str,
+    column: str,
+    value: Any,
+    *,
+    host: str,
+    port: int,
+    user: str,
+    password: str,
+    database: str,
+) -> dict | None:
+    """Fetch a single record by matching a specific column value."""
+
+    sql = f"SELECT * FROM `{table}` WHERE `{column}`=%s LIMIT 1"
+    with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(sql, (value,))
+            return cursor.fetchone()
+
+
 def insert_row(table: str, data: dict[str, Any], *, host: str, port: int, user: str, password: str, database: str) -> None:
     columns = ", ".join(f"`{col}`" for col in data)
     placeholders = ", ".join(["%s"] * len(data))
