@@ -44,6 +44,29 @@ def fetch_table_rows(table: str, *, host: str, port: int, user: str, password: s
             return cursor.fetchall()
 
 
+def fetch_foreign_keys(
+    table: str, *, host: str, port: int, user: str, password: str, database: str
+) -> list[dict]:
+    sql = """
+        SELECT
+            kcu.COLUMN_NAME AS column_name,
+            kcu.REFERENCED_TABLE_NAME AS referenced_table,
+            kcu.REFERENCED_COLUMN_NAME AS referenced_column
+        FROM information_schema.KEY_COLUMN_USAGE kcu
+        JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+            ON rc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+            AND rc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
+        WHERE kcu.TABLE_SCHEMA=%s
+          AND kcu.TABLE_NAME=%s
+          AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
+        ORDER BY kcu.ORDINAL_POSITION
+    """
+    with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(sql, (database, table))
+            return cursor.fetchall()
+
+
 def insert_row(table: str, data: dict[str, Any], *, host: str, port: int, user: str, password: str, database: str) -> None:
     columns = ", ".join(f"`{col}`" for col in data)
     placeholders = ", ".join(["%s"] * len(data))
@@ -92,6 +115,24 @@ def delete_row(
         with connection.cursor() as cursor:
             cursor.execute(sql, (key_value,))
         connection.commit()
+
+
+def fetch_record_by_value(
+    table: str,
+    column: str,
+    value: Any,
+    *,
+    host: str,
+    port: int,
+    user: str,
+    password: str,
+    database: str,
+) -> dict | None:
+    sql = f"SELECT * FROM `{table}` WHERE `{column}`=%s LIMIT 1"
+    with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(sql, (value,))
+            return cursor.fetchone()
 
 
 def normalize_records(rows: Iterable[dict]) -> list[dict[str, Any]]:

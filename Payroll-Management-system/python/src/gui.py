@@ -10,7 +10,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
-from db_service import delete_row, fetch_table_rows, fetch_table_schema, insert_row, list_tables, normalize_records, update_row
+from db_service import (
+    delete_row,
+    fetch_foreign_keys,
+    fetch_record_by_value,
+    fetch_table_rows,
+    fetch_table_schema,
+    insert_row,
+    list_tables,
+    normalize_records,
+    update_row,
+)
 from employee_service import (
     add_employee,
     delete_employee,
@@ -66,6 +76,9 @@ class DataManagerGUI:
         self.field_vars: dict[str, tk.StringVar] = {}
         self.key_column: str | None = None
         self.sort_state: dict[str, bool] = {}
+        self.foreign_keys: dict[str, dict[str, str]] = {}
+        self.hovered_fk_cell: tuple[str, str] | None = None
+        self.fk_popup: tk.Toplevel | None = None
         self.search_var = tk.StringVar()
 
         self._build_generator_form()
@@ -150,6 +163,9 @@ class DataManagerGUI:
 
         self.tree = ttk.Treeview(container, show="headings")
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+        self.tree.bind("<Motion>", self._on_tree_motion)
+        self.tree.bind("<Leave>", self._hide_fk_popup)
+        self.tree.bind("<ButtonRelease-1>", self._on_tree_click)
 
         vsb = ttk.Scrollbar(container, orient="vertical", command=self.tree.yview)
         hsb = ttk.Scrollbar(container, orient="horizontal", command=self.tree.xview)
@@ -458,10 +474,19 @@ class DataManagerGUI:
             messagebox.showinfo("提示", "请选择需要加载的表。")
             return
         try:
+            self._hide_fk_popup()
             cfg = self._get_db_config()
             self.table_schema = fetch_table_schema(table, **cfg)
             self.table_columns = [c["Field"] for c in self.table_schema]
             self.key_column = next((c["Field"] for c in self.table_schema if c.get("Key") == "PRI"), self.table_columns[0])
+            fk_rows = fetch_foreign_keys(table, **cfg)
+            self.foreign_keys = {
+                row["column_name"]: {
+                    "referenced_table": row["referenced_table"],
+                    "referenced_column": row["referenced_column"],
+                }
+                for row in fk_rows
+            }
             rows = normalize_records(fetch_table_rows(table, **cfg))
             self.db_records = rows
             self.filtered_records = rows
@@ -594,6 +619,136 @@ class DataManagerGUI:
                 self.emp_pos_var.set(values[3])
                 self.emp_salary_var.set(values[4])
                 self.emp_join_var.set(values[5])
+
+    def _on_tree_motion(self, event: tk.Event) -> None:
+        if self.table_mode != "db" or not self.foreign_keys:
+            self._hide_fk_popup()
+            return
+        column_id = self.tree.identify_column(event.x)
+        region = self.tree.identify_region(event.x, event.y)
+        if not column_id or region not in {"cell", "heading"}:
+            self._hide_fk_popup()
+            return
+        try:
+            column_index = int(column_id.replace("#", "")) - 1
+        except ValueError:
+            self._hide_fk_popup()
+            return
+        columns = self.tree["columns"]
+        if column_index < 0 or column_index >= len(columns):
+            self._hide_fk_popup()
+            return
+        column = columns[column_index]
+        if column not in self.foreign_keys:
+            self._hide_fk_popup()
+            return
+        if region == "heading":
+            mapping = self.foreign_keys[column]
+            info = f"引用 {mapping['referenced_table']}.{mapping['referenced_column']}"
+            self._show_popup(info, event.x_root + 10, event.y_root + 10)
+            self.hovered_fk_cell = None
+            return
+        item_id = self.tree.identify_row(event.y)
+        if not item_id:
+            self._hide_fk_popup()
+            return
+        cell_key = (item_id, column)
+        if self.hovered_fk_cell == cell_key:
+            return
+        self.hovered_fk_cell = cell_key
+        value = self.tree.set(item_id, column)
+        if value == "":
+            self._hide_fk_popup()
+            return
+        self._show_foreign_key_preview(column, value, event.x_root + 10, event.y_root + 10)
+
+    def _on_tree_click(self, event: tk.Event) -> None:
+        if self.table_mode != "db" or not self.foreign_keys:
+            return
+        region = self.tree.identify_region(event.x, event.y)
+        if region != "cell":
+            return
+        column_id = self.tree.identify_column(event.x)
+        try:
+            column_index = int(column_id.replace("#", "")) - 1
+        except ValueError:
+            return
+        columns = self.tree["columns"]
+        if column_index < 0 or column_index >= len(columns):
+            return
+        column = columns[column_index]
+        if column not in self.foreign_keys:
+            return
+        item_id = self.tree.identify_row(event.y)
+        if not item_id:
+            return
+        value = self.tree.set(item_id, column)
+        if value == "":
+            return
+        self._navigate_to_foreign_record(column, value)
+
+    def _show_popup(self, text: str, x: int, y: int) -> None:
+        self._hide_fk_popup()
+        self.fk_popup = tk.Toplevel(self.root)
+        self.fk_popup.wm_overrideredirect(True)
+        self.fk_popup.attributes("-topmost", True)
+        label = tk.Label(self.fk_popup, text=text, background="#ffffe0", relief="solid", borderwidth=1, justify="left")
+        label.pack(padx=5, pady=3)
+        self.fk_popup.geometry(f"+{x}+{y}")
+
+    def _hide_fk_popup(self, event: tk.Event | None = None) -> None:
+        if self.fk_popup is not None:
+            self.fk_popup.destroy()
+            self.fk_popup = None
+        self.hovered_fk_cell = None
+
+    def _show_foreign_key_preview(self, column: str, value: str, x: int, y: int) -> None:
+        mapping = self.foreign_keys.get(column)
+        if not mapping:
+            return
+        try:
+            cfg = self._get_db_config()
+        except Exception:
+            return
+        try:
+            record = fetch_record_by_value(
+                mapping["referenced_table"], mapping["referenced_column"], value, **cfg
+            )
+        except Exception as exc:
+            self._set_status(str(exc), is_error=True)
+            return
+        lines = [f"引用 {mapping['referenced_table']}.{mapping['referenced_column']}"]
+        if record:
+            for idx, (key, val) in enumerate(record.items()):
+                lines.append(f"{key}: {val}")
+                if idx >= 2:
+                    break
+        else:
+            lines.append("未找到关联记录。")
+        self._show_popup("\n".join(lines), x, y)
+
+    def _navigate_to_foreign_record(self, column: str, value: str) -> None:
+        mapping = self.foreign_keys.get(column)
+        if not mapping:
+            return
+        self.table_var.set(mapping["referenced_table"])
+        self.search_var.set(str(value))
+        self._load_table_data()
+        self._apply_search()
+        self._focus_record(mapping["referenced_column"], value)
+
+    def _focus_record(self, column: str, value: str) -> None:
+        columns = self.tree["columns"]
+        if column not in columns:
+            return
+        idx = columns.index(column)
+        for item in self.tree.get_children():
+            values = self.tree.item(item, "values")
+            if idx < len(values) and str(values[idx]) == str(value):
+                self.tree.selection_set(item)
+                self.tree.focus(item)
+                self.tree.see(item)
+                break
 
     def _clear_form_fields(self) -> None:
         for var in (
