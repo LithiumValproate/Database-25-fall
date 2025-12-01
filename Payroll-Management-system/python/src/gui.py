@@ -98,6 +98,7 @@ class DataManagerGUI:
         self.table_columns: list[str] = []
         self.table_schema: list[dict] = []
         self.field_vars: dict[str, tk.StringVar] = {}
+        self.placeholder_map: dict[tk.StringVar, str] = {}
         self.key_column: str | None = None
         self.sort_state: dict[str, bool] = {}
         self.search_var = tk.StringVar()
@@ -229,17 +230,15 @@ class DataManagerGUI:
         vsb.grid(row=0, column=1, rowspan=2, sticky="ns")
         hsb.grid(row=1, column=0, sticky="ew")
 
-        self.type_hint_frame = ttk.Frame(container, padding=(0, 6, 0, 0))
-        self.type_hint_frame.grid(row=2, column=0, sticky="ew")
         container.columnconfigure(0, weight=1)
         container.rowconfigure(0, weight=1)
 
     def _build_record_form(self) -> None:
-        self.form_frame = ttk.LabelFrame(self.root, text="表记录 CRUD（随选表动态更新）", padding=14)
-        self.form_frame.pack(fill="x", padx=10, pady=(0, 12), ipady=6)
+        self.form_frame = ttk.LabelFrame(self.root, text="表记录 CRUD（随选表动态更新）", padding=16)
+        self.form_frame.pack(fill="x", padx=10, pady=(4, 16), ipady=14)
 
         self.dynamic_fields = ttk.Frame(self.form_frame)
-        self.dynamic_fields.pack(fill="x", pady=5)
+        self.dynamic_fields.pack(fill="x", pady=10, ipady=8)
 
         db_btns = ttk.Frame(self.form_frame)
         db_btns.pack(fill="x", pady=5)
@@ -321,7 +320,6 @@ class DataManagerGUI:
             self.save_btn.state(["!disabled"])
         else:
             self.save_btn.state(["disabled"])
-        self._render_type_hints(columns)
 
     def _render_type_hints(self, columns: list[str]) -> None:
         frame = getattr(self, "type_hint_frame", None)
@@ -565,31 +563,39 @@ class DataManagerGUI:
         for child in self.dynamic_fields.winfo_children():
             child.destroy()
         self.field_vars = {}
+        self.placeholder_map = {}
         self.payroll_cache = {"basic_salary":None, "bonus_total":None, "deduction_total":None}
-        columns_per_row = 3
+        columns_per_row = 2
         for idx, col in enumerate(self.table_columns):
             var = tk.StringVar()
             self.field_vars[col] = var
             ttk.Label(self.dynamic_fields, text=col).grid(
-                row=idx // columns_per_row, column=(idx % columns_per_row) * 2, sticky="e", padx=6, pady=4
+                row=idx // columns_per_row, column=(idx % columns_per_row) * 2, sticky="e", padx=8, pady=6
             )
             holder = ttk.Frame(self.dynamic_fields)
-            holder.grid(row=idx // columns_per_row, column=(idx % columns_per_row) * 2 + 1, sticky="w", padx=6, pady=4)
+            holder.grid(row=idx // columns_per_row, column=(idx % columns_per_row) * 2 + 1, sticky="w", padx=8, pady=6)
 
+            hint_text = self.field_types.get(col, "")
             if self._should_use_fk_selector(col):
                 options = self._get_fk_options(col)
-                combo = ttk.Combobox(holder, textvariable=var, state="readonly", width=18,
-                                     values=[opt["key"] for opt in options])
+                combo = ttk.Combobox(
+                    holder, textvariable=var, state="readonly", width=18, values=[opt["key"] for opt in options]
+                )
                 combo.pack(side="left")
+                self._apply_placeholder(combo, var, hint_text)
                 preview = ttk.Label(holder, text="预览", relief="groove", padding=(4, 2))
                 preview.pack(side="left", padx=4)
                 preview.bind("<Enter>", lambda e, c=col:self._show_field_preview(e, c))
                 preview.bind("<Leave>", lambda _ :self._hide_fk_tooltip())
             elif self._is_date_field(col):
-                ttk.Entry(holder, textvariable=var, width=18, state="readonly").pack(side="left")
+                entry = ttk.Entry(holder, textvariable=var, width=18, state="readonly")
+                entry.pack(side="left")
+                self._apply_placeholder(entry, var, hint_text)
                 ttk.Button(holder, text="选日期", command=lambda v=var:self._open_date_picker(v)).pack(side="left", padx=4)
             else:
-                ttk.Entry(holder, textvariable=var, width=20).pack(side="left")
+                entry = ttk.Entry(holder, textvariable=var, width=22)
+                entry.pack(side="left")
+                self._apply_placeholder(entry, var, hint_text)
 
             if self.table_var.get() == "Payroll_Record" and col in {"BasicSalary", "TotalBonus", "TotalDeduction"}:
                 ttk.Button(holder, text="获取数据", command=lambda c=col:self._populate_payroll_field(c)).pack(side="left", padx=4)
@@ -599,10 +605,57 @@ class DataManagerGUI:
         for i in range(columns_per_row * 2):
             self.dynamic_fields.columnconfigure(i, weight=1)
 
+    def _apply_placeholder(self, widget: tk.Widget, var: tk.StringVar, hint: str) -> None:
+        if not hint:
+            return
+        placeholder = hint
+        self.placeholder_map[var] = placeholder
+        var.set(placeholder)
+        try:
+            widget.configure(foreground="#777")
+        except tk.TclError:
+            pass
+
+        def handle_change(*_args: object) -> None:
+            if var.get() != placeholder:
+                try:
+                    widget.configure(foreground="")
+                except tk.TclError:
+                    pass
+
+        def handle_focus_in(_event: tk.Event) -> None:
+            if var.get() == placeholder:
+                var.set("")
+            try:
+                widget.configure(foreground="")
+            except tk.TclError:
+                pass
+
+        def handle_focus_out(_event: tk.Event) -> None:
+            if not var.get().strip():
+                var.set(placeholder)
+                try:
+                    widget.configure(foreground="#777")
+                except tk.TclError:
+                    pass
+
+        widget.bind("<FocusIn>", handle_focus_in, add="+")
+        widget.bind("<FocusOut>", handle_focus_out, add="+")
+        var.trace_add("write", handle_change)
+
+    def _get_clean_value(self, var: tk.StringVar) -> str:
+        value = var.get().strip()
+        placeholder = self.placeholder_map.get(var)
+        if placeholder and value == placeholder:
+            return ""
+        return value
+
     def _collect_dynamic_data(self) -> dict:
         if not self.field_vars:
             raise ValueError("请先加载表以生成动态表单。")
-        data = {col:var.get().strip() for col, var in self.field_vars.items()}
+        data: dict[str, str] = {}
+        for col, var in self.field_vars.items():
+            data[col] = self._get_clean_value(var)
         if self.table_var.get() == "Payroll_Record":
             basic_salary = self._get_basic_salary_value(fetch_if_missing=True)
             bonus_total, deduction_total = self._get_bonus_deduction_values(fetch_if_missing=True)
@@ -650,8 +703,8 @@ class DataManagerGUI:
         return options
 
     def _get_payroll_context(self) -> tuple[str, str]:
-        employee_id = self.field_vars.get("EmployeeId", tk.StringVar()).get().strip()
-        payroll_date = self.field_vars.get("PayrollDate", tk.StringVar()).get().strip()
+        employee_id = self._get_clean_value(self.field_vars.get("EmployeeId", tk.StringVar()))
+        payroll_date = self._get_clean_value(self.field_vars.get("PayrollDate", tk.StringVar()))
         if not employee_id or not payroll_date:
             raise ValueError("Payroll_Record 需要先填写 EmployeeId 与 PayrollDate。")
         try:
@@ -682,7 +735,7 @@ class DataManagerGUI:
         return bonus_total, deduction_total
 
     def _get_basic_salary_value(self, *, fetch_if_missing: bool = False) -> float:
-        raw_value = self.field_vars.get("BasicSalary", tk.StringVar()).get().strip()
+        raw_value = self._get_clean_value(self.field_vars.get("BasicSalary", tk.StringVar()))
         if raw_value:
             try:
                 salary = float(raw_value)
@@ -697,8 +750,8 @@ class DataManagerGUI:
         raise ValueError("请先填写或获取 BasicSalary。")
 
     def _get_bonus_deduction_values(self, *, fetch_if_missing: bool = False) -> tuple[float, float]:
-        raw_bonus = self.field_vars.get("TotalBonus", tk.StringVar()).get().strip()
-        raw_deduction = self.field_vars.get("TotalDeduction", tk.StringVar()).get().strip()
+        raw_bonus = self._get_clean_value(self.field_vars.get("TotalBonus", tk.StringVar()))
+        raw_deduction = self._get_clean_value(self.field_vars.get("TotalDeduction", tk.StringVar()))
         bonus_val: float | None = None
         deduction_val: float | None = None
         if raw_bonus:
