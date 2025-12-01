@@ -102,6 +102,12 @@ class DataManagerGUI:
         self.sort_state: dict[str, bool] = {}
         self.search_var = tk.StringVar()
         self.foreign_keys: dict[str, tuple[str, str]] = {}
+        self.manual_fk_overrides: dict[str, tuple[str, str]] = {
+            "AbsenceType": ("Event", "EventId"),
+            "OvertimeType": ("Event", "EventId"),
+            "BonusType": ("Payroll_Item", "ItemId"),
+            "DeductionType": ("Payroll_Item", "ItemId"),
+        }
         self.fk_tooltip: tk.Toplevel | None = None
         self.fk_hover_target: tuple[str, str] | None = None
         self.fk_cache: dict[tuple[str, str, str], dict] = {}
@@ -534,6 +540,9 @@ class DataManagerGUI:
             self.key_column = next((c["Field"] for c in self.table_schema if c.get("Key") == "PRI"),
                                    self.table_columns[0])
             self.foreign_keys = self._extract_foreign_keys(fetch_table_constraints(table, **cfg))
+            for col, target in self.manual_fk_overrides.items():
+                if col in self.table_columns and col not in self.foreign_keys:
+                    self.foreign_keys[col] = target
             self.fk_option_records = {}
             rows = normalize_records(fetch_table_rows(table, **cfg))
             self.db_records = rows
@@ -627,14 +636,16 @@ class DataManagerGUI:
     def _should_use_fk_selector(self, column: str) -> bool:
         if column == "EmployeeId":
             return False
-        return column in self.foreign_keys
+        return column in self.foreign_keys or column in self.manual_fk_overrides
 
     def _is_date_field(self, column: str) -> bool:
         type_info = self.field_types.get(column, "").lower()
         return type_info.startswith("date") or "datetime" in type_info
 
     def _get_fk_options(self, column: str) -> list[dict]:
-        ref_table, ref_column = self.foreign_keys[column]
+        ref_table, ref_column = self.foreign_keys.get(column) or self.manual_fk_overrides.get(column, ("", ""))
+        if not ref_table or not ref_column:
+            return []
         cfg = self._get_db_config()
         records = fetch_table_rows(ref_table, **cfg)
         if ref_table == "Event":
