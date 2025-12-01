@@ -1,5 +1,3 @@
--- v2 --
-
 drop schema if exists payroll_management;
 create schema payroll_management;
 use payroll_management;

@@ -1,12 +1,11 @@
 import csv
 import random
 import string
-from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Sequence
 
-import pymysql
+from connector import mysql_connection
 
 
 # 随机数据生成
@@ -74,24 +73,6 @@ def gen_employee_records(names: list[str], jobs: list[tuple[str, str]]) -> list[
 
 
 # 数据库交互
-
-
-@contextmanager
-def mysql_connection(*, host: str, port: int, user: str, password: str, database: str):
-    connection = pymysql.connect(
-        host=host,
-        port=port,
-        user=user,
-        password=password,
-        database=database,
-        charset="utf8mb4",
-        autocommit=False,
-        cursorclass=pymysql.cursors.DictCursor,
-    )
-    try:
-        yield connection
-    finally:
-        connection.close()
 
 
 def insert_into_mysql(records: Iterable[dict], *, host: str, port: int, user: str, password: str,
@@ -172,7 +153,7 @@ def delete_employee(employee_id: str, *, host: str, port: int, user: str, passwo
         connection.commit()
 
 
-def import_employees_from_csv(path: Path, *, host: str, port: int, user: str, password: str, database: str) -> int:
+def import_from_csv(path: Path, *, host: str, port: int, user: str, password: str, database: str) -> int:
     with path.open(encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         required = {"id", "name", "dept", "position", "salary", "join_date"}
@@ -209,7 +190,8 @@ def import_employees_from_csv(path: Path, *, host: str, port: int, user: str, pa
     return len(rows)
 
 
-def export_employees_to_csv(records: Sequence[dict], path: Path) -> None:
+# 导出数据到CSV
+def export_to_csv(records: Sequence[dict], path: Path) -> None:
     fieldnames = ("id", "name", "dept", "position", "salary", "join_date")
     with path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)

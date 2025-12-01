@@ -46,11 +46,11 @@ from db_service import (
 from employee_service import (
     add_employee,
     delete_employee,
-    export_employees_to_csv,
+    export_to_csv,
     fetch_employees,
     gen_employee_records,
     gen_random_indices,
-    import_employees_from_csv,
+    import_from_csv,
     insert_into_mysql,
     read_jobs,
     read_lines,
@@ -202,7 +202,6 @@ class DataManagerGUI:
             return
 
         self.user_var.set(env_values.get("USR", self.user_var.get()))
-
         self.db_var.set(env_values.get("DB", self.db_var.get()))
 
     def _build_table_toolbar(self) -> None:
@@ -492,7 +491,7 @@ class DataManagerGUI:
             return
         try:
             cfg = self._get_db_config()
-            imported = import_employees_from_csv(Path(path), **cfg)
+            imported = import_from_csv(Path(path), **cfg)
             self._load_employees()
             messagebox.showinfo("成功", f"成功导入 {imported} 条记录。")
         except Exception as exc:
@@ -510,7 +509,7 @@ class DataManagerGUI:
         )
         if not path:
             return
-        export_employees_to_csv(self.db_records, Path(path))
+        export_to_csv(self.db_records, Path(path))
         messagebox.showinfo("已保存", f"已导出 {len(self.db_records)} 条记录到 {path}。")
         self._set_status(f"导出 {len(self.db_records)} 条记录。")
 

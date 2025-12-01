@@ -1,27 +1,9 @@
-from contextlib import contextmanager
 from typing import Any, Iterable
 
-import pymysql
+from connector import mysql_connection
 
 
-@contextmanager
-def mysql_connection(*, host: str, port: int, user: str, password: str, database: str):
-    connection = pymysql.connect(
-        host=host,
-        port=port,
-        user=user,
-        password=password,
-        database=database,
-        charset="utf8mb4",
-        autocommit=False,
-        cursorclass=pymysql.cursors.DictCursor,
-    )
-    try:
-        yield connection
-    finally:
-        connection.close()
-
-
+# 列出所有表
 def list_tables(*, host: str, port: int, user: str, password: str, database: str) -> list[str]:
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
         with connection.cursor() as cursor:
@@ -30,6 +12,7 @@ def list_tables(*, host: str, port: int, user: str, password: str, database: str
             return [row[key] for row in cursor.fetchall() if key in row]
 
 
+# 获取表的架构
 def fetch_table_schema(table: str, *, host: str, port: int, user: str, password: str, database: str) -> list[dict]:
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
         with connection.cursor() as cursor:
@@ -37,6 +20,7 @@ def fetch_table_schema(table: str, *, host: str, port: int, user: str, password:
             return cursor.fetchall()
 
 
+# 获取表的所有行
 def fetch_table_rows(table: str, *, host: str, port: int, user: str, password: str, database: str) -> list[dict]:
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
         with connection.cursor() as cursor:
@@ -44,6 +28,7 @@ def fetch_table_rows(table: str, *, host: str, port: int, user: str, password: s
             return cursor.fetchall()
 
 
+# 获取未结算的奖金和扣款总额
 def fetch_unsettled_totals(
         employee_id: str,
         payroll_date: str,
@@ -57,12 +42,12 @@ def fetch_unsettled_totals(
     """Sum unsettled bonus/deduction amounts before a given payroll date for an employee."""
 
     bonus_sql = (
-        "SELECT COALESCE(SUM(BonusAmount), 0) AS total "
-        "FROM `Bonus_Record` WHERE EmployeeId=%s AND IsSettled=0 AND BonusDate<=%s"
+        "select coalesce(sum(Bonusamount), 0) as Total "
+        "from `Bonus_Record` where Employeeid=%s and Issettled=0 and Bonusdate<=%s"
     )
     deduction_sql = (
-        "SELECT COALESCE(SUM(DeductionAmount), 0) AS total "
-        "FROM `Deduction_Record` WHERE EmployeeId=%s AND IsSettled=0 AND DeductionDate<=%s"
+        "select coalesce(sum(Deductionamount), 0) as Total "
+        "from `Deduction_Record` where Employeeid=%s and Issettled=0 and Deductiondate<=%s"
     )
     with mysql_connection(host=host, port=port, user=user, password=password, database=database) as connection:
         with connection.cursor() as cursor:
@@ -73,6 +58,7 @@ def fetch_unsettled_totals(
     return float(bonus_row.get("total", 0)), float(deduction_row.get("total", 0))
 
 
+# 根据特定列的值获取单条记录
 def fetch_record_by_column(
         table: str,
         column: str,
@@ -93,6 +79,7 @@ def fetch_record_by_column(
             return cursor.fetchone()
 
 
+# 插入记录
 def insert_row(table: str, data: dict[str, Any], *, host: str, port: int, user: str, password: str,
                database: str) -> None:
     columns = ", ".join(f"`{col}`" for col in data)
@@ -105,6 +92,7 @@ def insert_row(table: str, data: dict[str, Any], *, host: str, port: int, user: 
         connection.commit()
 
 
+# 更新记录
 def update_row(
         table: str,
         data: dict[str, Any],
@@ -126,6 +114,7 @@ def update_row(
         connection.commit()
 
 
+# 删除记录
 def delete_row(
         table: str,
         key_column: str,
@@ -144,6 +133,7 @@ def delete_row(
         connection.commit()
 
 
+# 标准化记录格式
 def normalize_records(rows: Iterable[dict]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for row in rows:
@@ -151,12 +141,10 @@ def normalize_records(rows: Iterable[dict]) -> list[dict[str, Any]]:
     return normalized
 
 
+# 获取表的约束信息
 def fetch_table_constraints(
         table: str, *, host: str, port: int, user: str, password: str, database: str
 ) -> list[dict[str, Any]]:
-    """
-    获取指定表的约束信息，包括主键、唯一键、外键与检查约束。
-    """
     sql = """
           select Tc.Constraint_Name as Constraint_Name, Tc.Constraint_Type as Constraint_Type,
                  Kcu.Column_Name as Column_Name, Kcu.Referenced_Table_Name as Referenced_Table,
