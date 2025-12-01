@@ -563,20 +563,20 @@ class DataManagerGUI:
             child.destroy()
         self.field_vars = {}
         self.payroll_cache = {"basic_salary":None, "bonus_total":None, "deduction_total":None}
-        columns_per_row = 2
+        columns_per_row = 4
         for idx, col in enumerate(self.table_columns):
             var = tk.StringVar()
             self.field_vars[col] = var
-            ttk.Label(self.dynamic_fields, text=col).grid(
-                row=idx // columns_per_row, column=(idx % columns_per_row) * 2, sticky="e", padx=8, pady=6
-            )
-            holder = ttk.Frame(self.dynamic_fields)
-            holder.grid(row=idx // columns_per_row, column=(idx % columns_per_row) * 2 + 1, sticky="w", padx=8, pady=6)
+            cell = ttk.Frame(self.dynamic_fields)
+            cell.grid(row=idx // columns_per_row, column=idx % columns_per_row, sticky="nsew", padx=8, pady=6)
+            ttk.Label(cell, text=col).pack(anchor="w")
+            holder = ttk.Frame(cell)
+            holder.pack(fill="x", pady=4)
 
             if self._should_use_fk_selector(col):
                 options = self._get_fk_options(col)
                 combo = ttk.Combobox(
-                    holder, textvariable=var, state="readonly", width=18, values=[opt["key"] for opt in options]
+                    holder, textvariable=var, state="readonly", width=16, values=[opt["key"] for opt in options]
                 )
                 combo.pack(side="left")
                 preview = ttk.Label(holder, text="预览", relief="groove", padding=(4, 2))
@@ -584,11 +584,11 @@ class DataManagerGUI:
                 preview.bind("<Enter>", lambda e, c=col:self._show_field_preview(e, c))
                 preview.bind("<Leave>", lambda _ :self._hide_fk_tooltip())
             elif self._is_date_field(col):
-                entry = ttk.Entry(holder, textvariable=var, width=18, state="readonly")
+                entry = ttk.Entry(holder, textvariable=var, width=16, state="readonly")
                 entry.pack(side="left")
                 ttk.Button(holder, text="选日期", command=lambda v=var:self._open_date_picker(v)).pack(side="left", padx=4)
             else:
-                entry = ttk.Entry(holder, textvariable=var, width=22)
+                entry = ttk.Entry(holder, textvariable=var, width=18)
                 entry.pack(side="left")
 
             if self.table_var.get() == "Payroll_Record" and col in {"BasicSalary", "TotalBonus", "TotalDeduction"}:
@@ -596,7 +596,7 @@ class DataManagerGUI:
             if self.table_var.get() == "Payroll_Record" and col == "NetSalary":
                 ttk.Button(holder, text="计算", command=self._calculate_net_salary).pack(side="left", padx=4)
 
-        for i in range(columns_per_row * 2):
+        for i in range(columns_per_row):
             self.dynamic_fields.columnconfigure(i, weight=1)
 
     def _get_clean_value(self, var: tk.StringVar) -> str:
