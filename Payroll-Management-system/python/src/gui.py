@@ -98,7 +98,6 @@ class DataManagerGUI:
         self.table_columns: list[str] = []
         self.table_schema: list[dict] = []
         self.field_vars: dict[str, tk.StringVar] = {}
-        self.placeholder_map: dict[tk.StringVar, str] = {}
         self.key_column: str | None = None
         self.sort_state: dict[str, bool] = {}
         self.search_var = tk.StringVar()
@@ -234,11 +233,11 @@ class DataManagerGUI:
         container.rowconfigure(0, weight=1)
 
     def _build_record_form(self) -> None:
-        self.form_frame = ttk.LabelFrame(self.root, text="表记录 CRUD（随选表动态更新）", padding=16)
-        self.form_frame.pack(fill="x", padx=10, pady=(4, 16), ipady=14)
+        self.form_frame = ttk.LabelFrame(self.root, text="表记录 CRUD（随选表动态更新）", padding=20)
+        self.form_frame.pack(fill="x", padx=12, pady=(8, 22), ipady=28)
 
         self.dynamic_fields = ttk.Frame(self.form_frame)
-        self.dynamic_fields.pack(fill="x", pady=10, ipady=8)
+        self.dynamic_fields.pack(fill="x", pady=14, ipady=14)
 
         db_btns = ttk.Frame(self.form_frame)
         db_btns.pack(fill="x", pady=5)
@@ -563,7 +562,6 @@ class DataManagerGUI:
         for child in self.dynamic_fields.winfo_children():
             child.destroy()
         self.field_vars = {}
-        self.placeholder_map = {}
         self.payroll_cache = {"basic_salary":None, "bonus_total":None, "deduction_total":None}
         columns_per_row = 2
         for idx, col in enumerate(self.table_columns):
@@ -575,14 +573,12 @@ class DataManagerGUI:
             holder = ttk.Frame(self.dynamic_fields)
             holder.grid(row=idx // columns_per_row, column=(idx % columns_per_row) * 2 + 1, sticky="w", padx=8, pady=6)
 
-            hint_text = self.field_types.get(col, "")
             if self._should_use_fk_selector(col):
                 options = self._get_fk_options(col)
                 combo = ttk.Combobox(
                     holder, textvariable=var, state="readonly", width=18, values=[opt["key"] for opt in options]
                 )
                 combo.pack(side="left")
-                self._apply_placeholder(combo, var, hint_text)
                 preview = ttk.Label(holder, text="预览", relief="groove", padding=(4, 2))
                 preview.pack(side="left", padx=4)
                 preview.bind("<Enter>", lambda e, c=col:self._show_field_preview(e, c))
@@ -590,12 +586,10 @@ class DataManagerGUI:
             elif self._is_date_field(col):
                 entry = ttk.Entry(holder, textvariable=var, width=18, state="readonly")
                 entry.pack(side="left")
-                self._apply_placeholder(entry, var, hint_text)
                 ttk.Button(holder, text="选日期", command=lambda v=var:self._open_date_picker(v)).pack(side="left", padx=4)
             else:
                 entry = ttk.Entry(holder, textvariable=var, width=22)
                 entry.pack(side="left")
-                self._apply_placeholder(entry, var, hint_text)
 
             if self.table_var.get() == "Payroll_Record" and col in {"BasicSalary", "TotalBonus", "TotalDeduction"}:
                 ttk.Button(holder, text="获取数据", command=lambda c=col:self._populate_payroll_field(c)).pack(side="left", padx=4)
@@ -605,50 +599,8 @@ class DataManagerGUI:
         for i in range(columns_per_row * 2):
             self.dynamic_fields.columnconfigure(i, weight=1)
 
-    def _apply_placeholder(self, widget: tk.Widget, var: tk.StringVar, hint: str) -> None:
-        if not hint:
-            return
-        placeholder = hint
-        self.placeholder_map[var] = placeholder
-        var.set(placeholder)
-        try:
-            widget.configure(foreground="#777")
-        except tk.TclError:
-            pass
-
-        def handle_change(*_args: object) -> None:
-            if var.get() != placeholder:
-                try:
-                    widget.configure(foreground="")
-                except tk.TclError:
-                    pass
-
-        def handle_focus_in(_event: tk.Event) -> None:
-            if var.get() == placeholder:
-                var.set("")
-            try:
-                widget.configure(foreground="")
-            except tk.TclError:
-                pass
-
-        def handle_focus_out(_event: tk.Event) -> None:
-            if not var.get().strip():
-                var.set(placeholder)
-                try:
-                    widget.configure(foreground="#777")
-                except tk.TclError:
-                    pass
-
-        widget.bind("<FocusIn>", handle_focus_in, add="+")
-        widget.bind("<FocusOut>", handle_focus_out, add="+")
-        var.trace_add("write", handle_change)
-
     def _get_clean_value(self, var: tk.StringVar) -> str:
-        value = var.get().strip()
-        placeholder = self.placeholder_map.get(var)
-        if placeholder and value == placeholder:
-            return ""
-        return value
+        return var.get().strip()
 
     def _collect_dynamic_data(self) -> dict:
         if not self.field_vars:
